@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>RobCo Construction Module</title>
+    <link rel="stylesheet" href="css/workshop.css">
+</head>
+<body>
+<div id="app">
+  <div class="dock" id="dock">
+
+    <div class="rail">
+      <div class="brand">
+        <span class="chev">&#x25B8;</span>
+        <span class="brand-txt">Construction</span>
+        <span class="brand-sub" id="siteCount">0 units</span>
+      </div>
+
+      <div id="cat-row" class="cat-row"></div>
+
+      <div class="rail-right">
+        <button class="fav-tab" id="fav-tab" onclick="toggleFavView()">
+          <span class="star">&#9733;</span><span>Favorites</span><span class="cnt" id="fav-count">0</span>
+        </button>
+        <div class="fs-ctl">
+          <button class="fs-btn" onclick="fsStep(-1)" title="Smaller">A&minus;</button>
+          <button class="fs-btn" onclick="fsStep(1)" title="Larger">A+</button>
+        </div>
+        <button class="icon-btn" id="refresh-cache-btn" title="Rescan buildables">&#x21BB;</button>
+        <button class="close-btn" onclick="closeHelper()">
+          <span class="text">Exit</span><span class="x-box">&#10005;</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="subbar">
+      <div id="sub-row" class="sub-row"></div>
+      <div class="tools">
+        <div class="lk-group">
+          <button class="lk-btn active" data-f="ALL" onclick="setFilter('ALL')">All</button>
+          <button class="lk-btn" data-f="BUILDABLE" onclick="setFilter('BUILDABLE')">Buildable</button>
+          <button class="lk-btn" data-f="LOCKED" onclick="setFilter('LOCKED')">Locked</button>
+        </div>
+        <label class="search">
+          <span class="s-ico">&#9906;</span>
+
+          <input id="q" type="text" placeholder="Search structures..." autocomplete="off" spellcheck="false" onfocus="imeFocus(this)">
+          <span class="s-clear" id="s-clear" onclick="clearSearch()">&#10005;</span>
+        </label>
+      </div>
+    </div>
+
+
+    <div class="statbar" id="statbar" hidden></div>
+
+
+    <div class="controls" id="controls">
+      <button class="ctl-toggle" onclick="toggleControls()" aria-expanded="false"
+              title="Free build controls">
+        <span class="ctl-label">Free build</span><span class="ctl-arrow" aria-hidden="true"></span>
+      </button>
+      <div class="ctl-body" id="ctl-body">
+        <div class="ctl-grp"><div class="ctl-h">Toggles</div>
+          <div class="ctl"><span class="k">F3</span><span class="d">Place in red / yellow pickup</span><span class="st" id="st-place">off</span></div>
+          <div class="ctl"><span class="k">F4</span><span class="d">Free camera</span><span class="st" id="st-cam">off</span></div>
+          <div class="ctl"><span class="k">F6</span><span class="d">Free height &mdash; place at aimed height (off = snap to floor)</span><span class="st" id="st-snap">off</span></div>
+          <div class="ctl"><span class="k">Shift+F6</span><span class="d">Object snap &mdash; snap to nearby build pieces</span><span class="st on" id="st-osnap">on</span></div>
+          <div class="ctl"><span class="k">F7</span><span class="d">Reset transform / vertical override</span></div>
+        </div>
+        <div class="ctl-grp"><div class="ctl-h">Transform</div>
+          <div class="ctl"><span class="k">Num 4/8/7</span><span class="d">Rotate yaw / pitch / roll</span></div>
+          <div class="ctl"><span class="k">Home/End</span><span class="d">Move forward / back</span></div>
+          <div class="ctl"><span class="k">Ins/Del</span><span class="d">Move right / left</span></div>
+          <div class="ctl"><span class="k">PgUp/PgDn</span><span class="d">Move up / down</span></div>
+          <div class="ctl"><span class="k">+ / &minus;</span><span class="d">Scale</span></div>
+          <div class="ctl ctl-note"><span class="k">Shift</span><span class="d">Reverse rotation direction</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="body">
+      <div class="pv-wrap">
+        <div class="preview" id="preview"><span class="pv-hint">Select an item</span></div>
+        <div class="pv-meta" id="pv-meta"><span class="dimtxt">No selection</span></div>
+      </div>
+
+      <div class="strip-wrap">
+        <button class="nudge l" onclick="nudge(-1)" title="Previous">&#8249;</button>
+        <div id="strip" class="strip"></div>
+        <button class="nudge r" onclick="nudge(1)" title="Next">&#8250;</button>
+      </div>
+    </div>
+
+    <div class="reqbar">
+      <div class="req-head">
+        <span class="req-title">Requirements</span>
+        <span class="req-for" id="req-for"></span>
+      </div>
+      <div id="materials-box" class="mats"><span class="dimtxt">Select an item.</span></div>
+
+
+      <div class="actionbar">
+        <div class="act-row">
+          <button class="act" id="act-place"  onclick="actPlace()">
+            <span class="k">Enter</span><span class="l">Place</span></button>
+          <button class="act" id="act-cancel" onclick="actCancel()">
+            <span class="k">Tab</span><span class="l">Cancel</span></button>
+          <button class="act" id="act-scrap"  onclick="actScrap()">
+            <span class="k">R</span><span class="l">Scrap</span></button>
+          <button class="act" id="act-tag"    onclick="actTag()" title="Favorite this recipe so the game highlights items that provide its components">
+            <span class="k">Q</span><span class="l">Tag for Search</span></button>
+          <button class="act act-exit" id="act-exit" onclick="closeHelper()">
+            <span class="k">Esc</span><span class="l">Exit</span></button>
+        </div>
+        <div class="hint">
+          <b>C</b> cursor <i>/</i> <b>A</b><b>D</b> browse <i>/</i> <b>W</b><b>S</b> category
+          <i>/</i> click <i>=</i> inspect <i>/</i> <b>E</b> <i>=</i> place <i>/</i> <b>F</b> favorite
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div id="scrap-overlay" hidden>
+    <div class="scrap-scrim"></div>
+    <div class="scrap-panel" role="dialog" aria-modal="true" aria-labelledby="scrap-title">
+      <div class="scrap-terminal-head">
+        <span>SALVAGE AUTHORIZATION</span>
+        <span class="scrap-session">WORKSHOP TERMINAL</span>
+      </div>
+      <div class="scrap-object">
+        <div class="scrap-title" id="scrap-title"></div>
+        <div class="scrap-count" id="scrap-count">0 RECOVERABLE MATERIALS</div>
+      </div>
+      <div class="scrap-yields" id="scrap-yields"></div>
+      <div class="scrap-actions">
+        <button class="scrap-action scrap-action-cancel" type="button" onclick="actScrapCancel()">
+          <span class="scrap-key">ESC / TAB</span><span>CANCEL</span>
+        </button>
+        <button class="scrap-action scrap-action-confirm" type="button" onclick="actScrapConfirm()">
+          <span class="scrap-key">R</span><span>SCRAP</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<script src="js/workshop.js"></script>
+</body>
+</html>

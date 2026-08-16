@@ -1,0 +1,7 @@
+# Build output (xmake)
+build/
+build-wine/
+.xmake/
+
+# Logs
+*.log
