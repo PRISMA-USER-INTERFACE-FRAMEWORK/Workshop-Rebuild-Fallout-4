@@ -90,8 +90,12 @@ Output lands in `build/windows/x64/release/PrismaCrafting.dll`.
 ```
 <mod folder>/
 ├── F4SE/Plugins/PrismaCrafting.dll
-└── PrismaUI_F4/views/          <- the contents of assets/views/
+├── PrismaUI_F4/views/          <- the contents of assets/views/
+├── PrismaUI_F4/JsonData/PrismaCraftingWorkbenches.example.json
+└── Interface/Translations/PrismaCrafting_en.json
 ```
+
+CI packages this layout under `Data/`, next to `fomod/`, as `PrismaCrafting-<version>.zip` (`tools/package_release.py`).
 
 The views must land under the framework's `PrismaUI_F4/views/` root, because `CreateView` is passed a
 filename relative to that root (`"crafting.html"`, `"workshop.html"`).

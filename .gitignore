@@ -8,3 +8,6 @@ build-wine/
 
 # Python bytecode
 __pycache__/
+
+# Release packaging output
+dist/
