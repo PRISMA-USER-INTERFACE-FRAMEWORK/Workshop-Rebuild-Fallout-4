@@ -56,8 +56,7 @@ See [DEPENDENCIES.md](DEPENDENCIES.md) for the framework and CommonLibF4 version
 ## Contributing
 
 Explanatory notes, reasoning, and bug history do not go in source comments or in this repository.
-They live in the private CodeNotes repository, one entry per symbol. Keep only a single line
-constraint comment in code when an invariant is not obvious.
+Keep only a single line constraint comment in code when an invariant is not obvious.
 
 ## License
 

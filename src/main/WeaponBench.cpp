@@ -1,4 +1,4 @@
-// Constraint: close chain is VERIFIED in RE record re-pm-answers/37-weapon-bench-gaps-b.md Q2a (queueHide, hiding, AdvanceMovie sit-state branch); frame counts are untuned, TODO-verify in game.
+// Constraint: close chain (queueHide, hiding, AdvanceMovie sit-state branch) is verified in RE; frame counts are untuned, TODO-verify in game.
 #include "RuntimeInternal.h"
 #include "WeaponBenchJson.h"
 #include "WeaponBenchSnapshot.h"
@@ -404,7 +404,7 @@ namespace WeaponBench
             {
                 if (s_installed) return true;
                 REL::Relocation<std::uintptr_t> vtable{ RE::VTABLE::ExamineMenu[0] };
-                // Constraint: slot 4 is AdvanceMovie, VERIFIED in re-pm-answers/37-weapon-bench-gaps-b.md Q1c and lib/commonlibf4/include/RE/E/ExamineMenu.h
+                // Constraint: slot 4 is AdvanceMovie per the CommonLibF4 ExamineMenu declaration; TODO-verify per runtime.
                 const auto originalAdvance = vtable.write_vfunc(0x4, &ExamineMenuHook::AdvanceMovie);  // TODO-verify
                 if (!originalAdvance) {
                     logger::critical("PrismaCrafting: ExamineMenu hook incomplete; native weapon bench disabled");

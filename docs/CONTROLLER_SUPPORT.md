@@ -149,8 +149,7 @@ Arrow, Enter, or Escape events cannot change the framework's authoritative activ
 Free height and scaling remain keyboard-only.
 
 `src/PrismaUI_F4_API.h:IVPrismaUI12` is the framework's canonical V1-V12 public header, vendored from
-release `framework-v2.1.1`. The
-versioned interfaces remain the primary route.
+release `framework-v2.1.1`. The versioned interfaces remain the primary route.
 
 ## Cursor
 

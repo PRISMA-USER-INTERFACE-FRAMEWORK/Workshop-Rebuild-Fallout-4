@@ -77,7 +77,7 @@ namespace WeaponBench
             if (g_logged.emplace(a_message).second) logger::warn("PrismaCrafting: weapon bench snapshot: {}", a_message);
         }
 
-        // Constraint: GetIndexData dereferences values without a null check (lib/commonlibf4/src/RE/B/BGSObjectInstanceExtra.cpp), so values must be tested first.
+        // Constraint: GetIndexData dereferences values without a null check in CommonLibF4, so values must be tested first.
         Installed ReadInstalled(const Stack& a_stack)
         {
             Installed out;

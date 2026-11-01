@@ -68,8 +68,7 @@ namespace crafting::ini
 ;View=1
 
 ;  Weapon bench dev mode: list every attachment for every slot as a virtual
-;  owned part (runtime-only; no items are added to the save). Read from
-;  [Debug] by src/main/CraftingSettings.cpp:LoadWeaponBenchDev.
+;  owned part (runtime-only; no items are added to the save).
 ;WeaponBenchDev=1
 
 ; ----------------------------------------------------------------------------
@@ -201,8 +200,8 @@ namespace crafting::ini
 [Experimental]
 
 ;  Open PrismaCrafting's weapon workbench screen on weapon benches instead of
-;  the vanilla one. Work in progress: the screen opens and closes but does not
-;  list or change weapon attachments yet, so leave it off for normal play.
+;  the vanilla one. Work in progress: the screen lists weapons and parts but
+;  installing and removing parts is not available yet, so leave it off for normal play.
 ;NativeWeaponBench=0
 
 ; ----------------------------------------------------------------------------
