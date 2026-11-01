@@ -429,7 +429,7 @@ extern "C" DLLEXPORT bool F4SEAPI F4SEPlugin_Query(const F4SE::QueryInterface* a
         logger::critical("Loaded in editor — aborting.");
         return false;
     }
-    // Constraint: NG loads, but the workshop paths stay behind WorkshopDataResolvable() until NG addresses exist for the 47xxxxx globals.
+    // Constraint: NG workshop globals are raw 1.10.984 RVAs, so WorkshopDataResolvable() admits NG only at exactly 1.10.984.
     const auto runtime = a_f4se->RuntimeVersion();
     if (runtime != F4SE::RUNTIME_1_10_163 && runtime != F4SE::RUNTIME_1_10_980 &&
         runtime != F4SE::RUNTIME_1_10_984 && runtime != F4SE::RUNTIME_1_11_191 &&

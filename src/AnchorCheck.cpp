@@ -14,8 +14,8 @@ namespace crafting::anchors
         if (!ids::WorkshopDataResolvable()) {
             logger::warn("PrismaCrafting: [ANCHORS] runtime {}.{}.{}.{} has no engine anchor "
                          "mappings -- the workshop features are unavailable here and nothing was "
-                         "resolved. On Next-Gen (1.10.980-1.10.984) the settlement "
-                         "workshop paths stay off until NG addresses are found for its globals.",
+                         "resolved. The settlement workshop paths work on Next-Gen "
+                         "1.10.984 only; 1.10.980 has no workshop global addresses yet.",
                          ver.major(), ver.minor(), ver.patch(), ver.build());
             return false;
         }
@@ -54,8 +54,8 @@ namespace crafting::anchors
         gl("ActiveEdit", ids::ActiveEdit);
         gl("MultiSelect", ids::MultiSelect);
         gl("CurrentWorkshopHandle", ids::CurrentWorkshopHandle);
-        gl("PlacementItemTranslLS", RE::ID::Workshop::PlacementItemTranslLS);
-        gl("PlacementCollisionCount", RE::ID::Workshop::PlacementCollisionCount);
+        gl("PlacementItemTranslLS", ids::PlacementItemTranslLS);
+        gl("PlacementCollisionCount", ids::PlacementCollisionCount);
 
         std::size_t ok = 0, bad = 0;
         for (const auto& r : results)

@@ -184,7 +184,7 @@ void PumpDeferredScrap()
     }
 
     if (crafting::ids::WorkshopDataResolvable()) {
-        static REL::Relocation<std::uint32_t*> placementCollisionCount{ RE::ID::Workshop::PlacementCollisionCount };
+        static REL::Relocation<std::uint32_t*> placementCollisionCount{ crafting::ids::PlacementCollisionCount };
         if (placementCollisionCount.get()) {
             *placementCollisionCount.get() = 0;
         } else {

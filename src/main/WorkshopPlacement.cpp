@@ -316,7 +316,8 @@ bool SpawnPlacementGhost(std::uint32_t a_recipeId, std::uint32_t a_createdId)
     }
 
     if (crafting::ids::WorkshopDataResolvable()) {
-        if (auto* transl = RE::Workshop::GetPlacementItemTranslLS()) {
+        static REL::Relocation<RE::NiPoint3*> translLS{ crafting::ids::PlacementItemTranslLS };
+        if (auto* transl = translLS.get()) {
             transl->x = 0.0f;
             transl->y = kBoundlessGhostFallbackDistance;
             transl->z = 0.0f;

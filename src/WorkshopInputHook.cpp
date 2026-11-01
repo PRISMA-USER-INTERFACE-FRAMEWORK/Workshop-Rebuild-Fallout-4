@@ -94,6 +94,7 @@ namespace WorkshopInputHook
 
     static bool PlacementGhostReady()
     {
+        if (!crafting::ids::WorkshopDataResolvable()) return false;
         static REL::Relocation<bool*> activeEdit{ crafting::ids::ActiveEdit };
         if (!activeEdit.get() || !*activeEdit) return false;
 
@@ -476,6 +477,7 @@ namespace WorkshopInputHook
 
     bool HoldingPlacement()
     {
+        if (!crafting::ids::WorkshopDataResolvable()) return false;
         static REL::Relocation<bool*> activeEdit{ crafting::ids::ActiveEdit };
         return activeEdit.get() && *activeEdit && CurrentPlacementRefId() != 0;
     }
