@@ -2,8 +2,10 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<title>Prisma Crafting Terminal</title>
+<title data-l10n="Prisma Crafting Terminal">Prisma Crafting Terminal</title>
 <link rel="stylesheet" href="css/crafting.css">
+<link rel="stylesheet" href="prisma_controller_glyphs.css">
+<link rel="stylesheet" href="css/craft_notice.css">
 <link rel="stylesheet" href="css/cooking.css">
 <link rel="stylesheet" href="css/theme-pipboy.css">
 </head>
@@ -15,20 +17,20 @@
     <div class="hdr-top">
       <div class="title-row">
         <div class="title-block">
-          <div class="main" id="titleMain">PRODUCTION RECONSTRUCTION</div>
+          <div class="main" id="titleMain" data-l10n="PRODUCTION RECONSTRUCTION">PRODUCTION RECONSTRUCTION</div>
           <div class="sub" id="titleSub"></div>
         </div>
-        <div class="fw-badge">MODULE TERMINAL</div>
+        <div class="fw-badge" data-l10n="MODULE TERMINAL">MODULE TERMINAL</div>
       </div>
       <div class="hdr-right">
-        <div class="fs-ctl" title="FONT SIZE">
-          <button class="fs-btn" onclick="fsStep(-1)">A−</button>
-          <button class="fs-btn" onclick="fsStep(1)">A+</button>
+        <div class="fs-ctl" title="FONT SIZE" data-l10n-title="FONT SIZE">
+          <button class="fs-btn" onclick="fsStep(-1)" data-l10n="A−">A−</button>
+          <button class="fs-btn" onclick="fsStep(1)" data-l10n="A+">A+</button>
         </div>
-        <div class="caps-box">CAPS <span id="capsVal">—</span></div>
+        <div class="caps-box"><span data-l10n="CAPS ">CAPS </span><span id="capsVal">—</span></div>
 
         <button class="tarkov-close-btn" onclick="closeMenu()">
-          <span class="text">CLOSE</span>
+          <span class="text" data-l10n="CLOSE">CLOSE</span>
           <span class="x-box">✕</span>
         </button>
       </div>
@@ -37,46 +39,44 @@
   </header>
 
   <div class="cat-bar">
-    <div class="cat-status">DATA MATRIX // <strong id="readyCount">0 MODULES DETECTED</strong></div>
+    <div class="cat-status"><span data-l10n="DATA MATRIX // ">DATA MATRIX // </span><strong id="readyCount" data-l10n="0 MODULES DETECTED">0 MODULES DETECTED</strong></div>
     <div class="filter-wrap">
       <span class="lk-group" id="lkGroup">
-        <button class="lk-btn active" data-lk="ALL" onclick="setLockFilter('ALL')">ALL</button>
-        <button class="lk-btn" data-lk="UNLOCKED" onclick="setLockFilter('UNLOCKED')">UNLOCKED</button>
-        <button class="lk-btn" data-lk="LOCKED" onclick="setLockFilter('LOCKED')">LOCKED</button>
+        <button class="lk-btn active" data-lk="ALL" onclick="setLockFilter('ALL')" data-l10n="ALL">ALL</button>
+        <button class="lk-btn" data-lk="UNLOCKED" onclick="setLockFilter('UNLOCKED')" data-l10n="UNLOCKED">UNLOCKED</button>
+        <button class="lk-btn" data-lk="LOCKED" onclick="setLockFilter('LOCKED')" data-l10n="LOCKED">LOCKED</button>
       </span>
       <span class="lk-group">
-        <button class="lk-btn" id="canMakeBtn" data-lk="CANMAKE" onclick="toggleCanMake()">HAVE PARTS</button>
+        <button class="lk-btn" id="canMakeBtn" data-lk="CANMAKE" onclick="toggleCanMake()" data-l10n="HAVE PARTS">HAVE PARTS</button>
       </span>
-
 
       <span class="lk-group">
-        <button class="lk-btn active" data-sort="NAME" onclick="setSort('NAME')">NAME</button>
-        <button class="lk-btn" data-sort="VALUE" onclick="setSort('VALUE')">VALUE</button>
+        <button class="lk-btn active" data-sort="NAME" onclick="setSort('NAME')" data-l10n="NAME">NAME</button>
+        <button class="lk-btn" data-sort="VALUE" onclick="setSort('VALUE')" data-l10n="VALUE">VALUE</button>
       </span>
-      <input class="filter-input" id="filterInput" placeholder="FILTER ASSEMBLY CATALOG..." oninput="onFilter()" onfocus="imeFocus(this)">
-      <button class="vanilla-link" id="cheatBtn" onclick="toggleCheat()">CHEAT MODE: OFF</button>
-      <button class="vanilla-link" onclick="fsStep(-1)">A&minus;</button>
-      <button class="vanilla-link" onclick="fsStep(1)">A+</button>
-      <button class="vanilla-link" id="themeBtn" onclick="cycleTheme()">THEME: TARKOV</button>
-      <button class="vanilla-link" onclick="closeMenu()">CLOSE</button>
-      <button class="vanilla-link" id="stationsBtn" onclick="openWorkbenches()">STATIONS</button>
+      <input class="filter-input" id="filterInput" placeholder="FILTER ASSEMBLY CATALOG..." data-l10n-placeholder="FILTER ASSEMBLY CATALOG..." oninput="onFilter()" onfocus="imeFocus(this)">
+      <button class="vanilla-link" id="cheatBtn" onclick="toggleCheat()" data-l10n="CHEAT MODE: OFF">CHEAT MODE: OFF</button>
+      <button class="vanilla-link" onclick="fsStep(-1)" data-l10n="A−">A&minus;</button>
+      <button class="vanilla-link" onclick="fsStep(1)" data-l10n="A+">A+</button>
+      <button class="vanilla-link" id="themeBtn" onclick="cycleTheme()" data-l10n="THEME: TARKOV">THEME: TARKOV</button>
+      <button class="vanilla-link" onclick="closeMenu()" data-l10n="CLOSE">CLOSE</button>
+      <button class="vanilla-link" id="stationsBtn" onclick="openWorkbenches()" data-l10n="STATIONS">STATIONS</button>
     </div>
   </div>
 
   <div id="body">
 
+    <aside id="catRail" data-pb-label="CATEGORIES" data-l10n-data-pb-label="CATEGORIES"></aside>
 
-    <aside id="catRail"></aside>
-
-    <div id="gridCol">
+    <div id="gridCol" data-pb-label="RECIPES" data-l10n-data-pb-label="RECIPES">
       <div id="grid"></div>
       <div id="pager"></div>
     </div>
 
-    <div id="detail">
+    <div id="detail" data-pb-label="REQUIRES" data-l10n-data-pb-label="REQUIRES">
       <div class="preview" id="preview"><span id="previewIcon"></span></div>
       <div class="detail-body" id="detailBody">
-        <div class="empty-d">SELECT INTEL COMPONENT TARGET</div>
+        <div class="empty-d" data-l10n="SELECT INTEL COMPONENT TARGET">SELECT INTEL COMPONENT TARGET</div>
       </div>
       <div class="craft-area">
         <div class="qty-row" id="qtyRow" style="display:none">
@@ -85,12 +85,11 @@
           <button class="qty-btn" onclick="bumpQty(1)">+</button>
           <span class="qty-val" id="qtyVal">1</span>
         </div>
-        <button id="craftBtn" class="cant" onclick="craft()">CHOOSE PRODUCTION SCHEME</button>
+        <button id="craftBtn" class="cant" onclick="craft()" data-l10n="CHOOSE PRODUCTION SCHEME">CHOOSE PRODUCTION SCHEME</button>
       </div>
 
     </div>
   </div>
-
 
   <div id="workbench">
     <div id="wbLamp"></div>
@@ -113,18 +112,17 @@
 
         <div class="wb-title-and-badge">
           <div class="wb-title-row-container">
-            <div class="wb-title-name" id="wbName">HIDEOUT STATIONS</div>
+            <div class="wb-title-name" id="wbName" data-l10n="HIDEOUT STATIONS">HIDEOUT STATIONS</div>
             <div class="wb-status-pill" id="wbStatusPill">
               <svg viewBox="0 0 24 24"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>
-              <span id="wbStatusText">LOCKED</span>
+              <span id="wbStatusText" data-l10n="LOCKED">LOCKED</span>
             </div>
           </div>
         </div>
       </div>
 
-
       <button class="tarkov-close-btn" onclick="closeWorkbenches()">
-        <span class="text">CLOSE</span>
+        <span class="text" data-l10n="CLOSE">CLOSE</span>
         <span class="x-box">✕</span>
       </button>
     </div>
@@ -134,27 +132,31 @@
     </div>
   </div>
 
+  <div id="controls" class="ctrl-bar" aria-hidden="true"></div>
 
 </div>
 
-
 <div id="cheatModal">
   <div class="modal-box">
-    <div class="modal-title">CHEAT MODE OVERRIDE</div>
-    <div class="modal-body">Enabling Cheat Mode is a full override: it bypasses workbench level requirements, recipe conditions, AND crafting material costs, letting you craft any recipe for free. Proceed?</div>
+    <div class="modal-title" data-l10n="CHEAT MODE OVERRIDE">CHEAT MODE OVERRIDE</div>
+    <div class="modal-body" data-l10n="Enabling Cheat Mode is a full override: it bypasses workbench level requirements, recipe conditions, AND crafting material costs, letting you craft any recipe for free. Proceed?">Enabling Cheat Mode is a full override: it bypasses workbench level requirements, recipe conditions, AND crafting material costs, letting you craft any recipe for free. Proceed?</div>
     <div class="modal-btns">
-      <button class="modal-btn cancel" onclick="cancelCheat()">ABORT</button>
-      <button class="modal-btn ok" onclick="confirmCheat()">ENABLE CHEAT MODE</button>
+      <button class="modal-btn cancel" onclick="cancelCheat()" data-l10n="ABORT">ABORT</button>
+      <button class="modal-btn ok" onclick="confirmCheat()" data-l10n="ENABLE CHEAT MODE">ENABLE CHEAT MODE</button>
     </div>
   </div>
 </div>
 
 </div>
 
-<script async src="icons/auto/manifest.js"></script>
-<script async src="icons/turntable/manifest.js"></script>
+<script src="js/localization.js"></script>
+<script src="prisma_controller_glyphs.js"></script>
+<script src="js/crafting_workbenches.js"></script>
+<script src="js/crafting_preview.js"></script>
 <script src="js/crafting.js"></script>
+<script src="js/craft_notice.js"></script>
 
 <script src="js/cooking.js"></script>
+<script src="js/crafting_controller.js"></script>
 </body>
 </html>

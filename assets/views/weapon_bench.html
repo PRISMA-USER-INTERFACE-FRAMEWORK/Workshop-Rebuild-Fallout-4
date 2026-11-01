@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Prisma Armory</title>
+<link rel="stylesheet" href="css/weapon_bench.css">
+</head>
+<body>
+<header><button id="close" aria-label="Exit workbench">‹ <kbd>ESC</kbd></button><span class="brand">PRISMA / ARMORY</span><span class="header-divider"></span><span class="eyebrow">CUSTOMIZE WEAPON</span><span class="station">FIELD WORKBENCH <span class="status-dot"></span></span></header>
+<main>
+  <aside class="parts">
+    <div class="eyebrow">WEAPON CONFIGURATION</div><h1 id="weapon-name">WEAPON WORKBENCH</h1><p id="weapon-subtitle">Select a weapon to begin.</p>
+    <div id="stats" class="stats"></div>
+    <div class="section-heading"><h2 id="slot-name">SELECT A SLOT</h2><span class="section-number">01 / INSPECT</span></div>
+    <p id="slot-help">Choose a slot to see available parts.</p><div id="installed" class="installed"></div>
+    <div class="part-detail"><div id="part-preview" class="preview part-preview"><p id="part-preview-empty">Attachment preview unavailable</p></div><h3 id="part-name">NO PART SELECTED</h3><p id="part-description"></p><p id="exchange"></p><button id="install" class="primary" disabled>INSTALL ATTACHMENT</button><button id="remove" disabled>REMOVE TO INVENTORY</button></div>
+  </aside>
+  <section class="assembly" aria-label="Weapon and attachment slots">
+    <div id="weapon-preview" class="preview"><span class="preview-label">ASSEMBLY / LIVE VIEW</span><p id="preview-empty">Weapon preview unavailable</p><span id="fitted-count"></span></div><div id="slots" class="slots"></div>
+  </section>
+  <section class="attachment-tray" aria-label="Available attachments"><div class="section-heading"><h2>AVAILABLE ATTACHMENTS</h2><label class="toggle"><input id="owned-only" type="checkbox" checked> OWNED ONLY</label></div><div id="choices" class="choices"></div></section>
+  <section class="inventory" aria-label="Weapon inventory"><div class="inventory-heading"><h2>LOADOUT <span id="weapon-count">00</span></h2><label class="sr-only" for="search">Search inventory</label><input id="search" type="search" placeholder="Find weapon…" autocomplete="off"></div><div id="weapons" class="weapon-list"></div></section>
+</main>
+<footer><span><span class="status-dot"></span> <span id="status" role="status" aria-live="polite">Workbench unavailable. Your inventory has not changed.</span></span><span><kbd>←</kbd><kbd>→</kbd> SLOT <kbd>ENTER</kbd> SELECT <kbd>ESC</kbd> BACK</span></footer>
+<div id="confirm" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-text"><div class="dialog"><div class="eyebrow">CONFIRM MODIFICATION</div><h2 id="confirm-title">INSTALL ATTACHMENT</h2><p id="confirm-text"></p><div class="dialog-actions"><button id="cancel">CANCEL</button><button id="apply" class="primary">CONFIRM</button></div></div></div>
+<script src="js/weapon_bench.js"></script>
+</body>
+</html>

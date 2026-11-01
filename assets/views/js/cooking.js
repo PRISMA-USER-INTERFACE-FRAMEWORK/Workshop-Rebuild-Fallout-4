@@ -1,6 +1,3 @@
-
-
-
 let ckMode = null;
 
 function setBenchMode(m) {
@@ -9,10 +6,13 @@ function setBenchMode(m) {
 
   ckMode = next;
   document.body.classList.toggle("cooking-mode", next);
-  const t = document.getElementById("titleMain");
-  if (t) t.textContent = next ? "COOKING FIRE" : "PRODUCTION WORKSTATION";
+  updateBenchTitle();
   if (typeof activeTab !== "undefined") { activeTab = "ALL"; activeSub = "ALL"; }
 
   if (typeof setLockFilter === "function") setLockFilter("ALL", true);
+}
+function updateBenchTitle() {
+  const t = document.getElementById("titleMain");
+  if (ckMode !== null) pcSetText(t, ckMode ? "COOKING FIRE" : "PRODUCTION WORKSTATION");
 }
 window.setBenchMode = setBenchMode;

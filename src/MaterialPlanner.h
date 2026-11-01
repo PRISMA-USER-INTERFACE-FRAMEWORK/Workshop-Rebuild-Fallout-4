@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <limits>
+#include <utility>
 #include <vector>
 
 namespace MaterialPlanner
@@ -10,13 +11,13 @@ namespace MaterialPlanner
     struct Bundle
     {
         std::vector<std::uint64_t> yields;
-        std::uint32_t available = 0;
+        std::uint64_t available = 0;
     };
 
     struct Plan
     {
         bool satisfied = false;
-        std::vector<std::uint32_t> selected;
+        std::vector<std::uint64_t> selected;
         std::vector<std::uint64_t> remaining;
     };
 
@@ -30,28 +31,34 @@ namespace MaterialPlanner
             return std::all_of(result.remaining.begin(), result.remaining.end(),
                                [](std::uint64_t n) { return n == 0; });
         };
+        using Sum = std::pair<std::uint64_t, std::uint64_t>;
+        const auto add = [](Sum& sum, std::uint64_t value) {
+            if (sum.second > std::numeric_limits<std::uint64_t>::max() - value) ++sum.first;
+            sum.second += value;
+        };
 
         while (!complete()) {
             std::size_t best = bundles.size();
-            std::uint64_t bestCoverage = 0;
-            std::uint64_t bestWaste = std::numeric_limits<std::uint64_t>::max();
+            Sum bestCoverage{};
+            Sum bestWaste{ std::numeric_limits<std::uint64_t>::max(),
+                           std::numeric_limits<std::uint64_t>::max() };
             std::size_t bestDimensions = 0;
 
             for (std::size_t i = 0; i < bundles.size(); ++i) {
                 const auto& bundle = bundles[i];
                 if (bundle.available == 0 || bundle.yields.size() != result.remaining.size()) continue;
 
-                std::uint64_t coverage = 0;
-                std::uint64_t waste = 0;
+                Sum coverage{};
+                Sum waste{};
                 std::size_t dimensions = 0;
                 for (std::size_t j = 0; j < result.remaining.size(); ++j) {
                     if (result.remaining[j] == 0 || bundle.yields[j] == 0) continue;
                     ++dimensions;
-                    coverage += std::min(result.remaining[j], bundle.yields[j]);
+                    add(coverage, std::min(result.remaining[j], bundle.yields[j]));
                     if (bundle.yields[j] > result.remaining[j])
-                        waste += bundle.yields[j] - result.remaining[j];
+                        add(waste, bundle.yields[j] - result.remaining[j]);
                 }
-                if (coverage == 0) continue;
+                if (coverage == Sum{}) continue;
 
                 if (dimensions > bestDimensions ||
                     (dimensions == bestDimensions && coverage > bestCoverage) ||
@@ -66,14 +73,13 @@ namespace MaterialPlanner
             if (best == bundles.size()) return result;
 
             auto& bundle = bundles[best];
-            std::uint32_t take = bundle.available;
+            std::uint64_t take = bundle.available;
             for (std::size_t j = 0; j < result.remaining.size(); ++j) {
                 const auto yield = bundle.yields[j];
                 if (result.remaining[j] == 0 || yield == 0) continue;
                 const auto toFinish = result.remaining[j] / yield +
                                       (result.remaining[j] % yield != 0 ? 1 : 0);
-                take = std::min<std::uint32_t>(take, static_cast<std::uint32_t>(
-                    std::min<std::uint64_t>(toFinish, std::numeric_limits<std::uint32_t>::max())));
+                take = std::min(take, toFinish);
             }
             if (take == 0) take = 1;
 

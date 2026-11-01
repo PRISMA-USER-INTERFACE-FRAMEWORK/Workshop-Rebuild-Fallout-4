@@ -1,0 +1,3 @@
+# Third party single header kept as shipped upstream
+src/SimpleIni.h
+src/PrismaUI_F4_API.h

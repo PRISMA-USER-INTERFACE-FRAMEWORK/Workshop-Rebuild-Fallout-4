@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -8,6 +9,15 @@ namespace RE { class TESForm; }
 
 namespace CraftingConfig
 {
+
+    struct CategoryRule
+    {
+        bool keyword = false;
+        std::string id;
+        std::string category;
+    };
+
+    std::span<const CategoryRule> CategoryRules();
 
     struct CompSpec
     {
@@ -37,7 +47,7 @@ namespace CraftingConfig
 
     bool Empty();
 
-    const RecipeOverride* Find(const std::string& createdKey, const std::string& editorId, uint32_t formId);
+    const RecipeOverride* Find(const std::string& createdKey, const std::string& editorId, uint32_t formRef);
 
     RE::TESForm* ResolveForm(const std::string& id);
 

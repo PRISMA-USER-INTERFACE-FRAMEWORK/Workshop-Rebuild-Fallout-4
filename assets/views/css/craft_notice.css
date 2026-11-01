@@ -1,0 +1,22 @@
+#craftNotice {
+  position: fixed;
+  left: 50%;
+  top: 24px;
+  z-index: 1000;
+  transform: translate(-50%, -12px);
+  padding: 10px 18px;
+  border: 1px solid var(--green);
+  background: rgba(8, 12, 7, 0.96);
+  color: var(--green);
+  font-size: calc(12px * var(--ui-fs));
+  font-weight: bold;
+  letter-spacing: 0.08em;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+
+#craftNotice.show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}

@@ -1,6 +1,3 @@
-
-
-
 let allItems = [];
 let currentCategory = 'All';
 let currentSub = 'All';
@@ -12,9 +9,26 @@ let playerResources = {};
 let isPlacing = false;
 let favs = new Set();
 let navIndex = -1;
+let pendingBuildables = '';
+let pendingSelectionKey = '';
+let expectedBuildableChunks = null;
+let receivedBuildableChunks = 0;
+let buildableDeliveryFailed = false;
+let activeBuildableSerial = '';
+let activeBuildableRequestId = 0;
+let lastBuildableSerial = 0;
+let catalogSession = 0;
+let catalogRequestId = 0;
+let catalogPage = 0;
+let catalogPageCount = 0;
+let catalogFacetTotal = 0;
+let catalogCategories = [];
+let catalogFavoriteCategories = [];
+let pendingNavigationEnd = false;
+
+const WORKSHOP_RENDER_LIMIT = 64;
 
 const FAV_KEY = 'pc_ws_favs';
-const SCALE_KEY = 'pc_ws_uiScale';
 
 const CAT_COLOR = {
     'Structures': '#5b7fa6', 'Furniture': '#a6713f', 'Power': '#b39a3c', 'Defense': '#9c4640',
@@ -23,10 +37,10 @@ const CAT_COLOR = {
 };
 
 function esc(s) {
-    return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 function cleanName(s) { return (s || '').replace(/_/g, ' ').trim(); }
-function dName(r) { return cleanName(r.name) || cleanName(r.editorId) || 'Unknown'; }
+function dName(r) { return cleanName(r.name) || cleanName(r.editorId) || pcText('Unknown'); }
 function menuPathOf(r) {
     if (r.menuPath && r.menuPath.length) return r.menuPath;
     if (r.filters && r.filters[0]) return cleanName(r.filters[0]);
@@ -50,102 +64,13 @@ function isCraftable(r) {
     return !c.some(comp => (comp.have || 0) < (comp.count || 0));
 }
 
-function keyOf(r) { return r ? (r.recipeKey || r.formId || r.editorId || r.createdKey) : ''; }
+function keyOf(r) { return r ? (r.recipeKey || r.formRef || r.editorId || r.createdKey) : ''; }
+function validPlacementSelectionIndex(view, selected, index) {
+    if (!selected || index < 0 || index >= view.length) return -1;
+    return keyOf(view[index]) === keyOf(selected) ? index : -1;
+}
 function imeFocus(el) {
     try { if (window.__prismaImeFocusNotify) window.__prismaImeFocusNotify(el); } catch (e) {}
-}
-
-let _mpCards = {};
-let _mpStatusHooked = false;
-
-function mpApi() {
-    const a = window.__prismaUI_modelPreview;
-    return (a && typeof a.show === 'function') ? a : null;
-}
-function meshPathsOf(r) {
-    if (!r) return null;
-    if (r.nifPaths && r.nifPaths.length > 1) return r.nifPaths;
-    return r.nifPath ? [r.nifPath] : null;
-}
-
-function cardVisible(el) {
-    const strip = document.getElementById('strip');
-    if (!strip || !el || !el.isConnected) return false;
-    const r = el.getBoundingClientRect(), s = strip.getBoundingClientRect();
-    if (!(r.width > 0 && r.height > 0)) return false;
-    return r.bottom > s.top && r.top < s.bottom && r.right > s.left && r.left < s.right;
-}
-
-function clipToStrip() {
-    const el = document.getElementById('strip');
-    if (!el) return {};
-    const c = el.getBoundingClientRect();
-    return { clipX: Math.round(c.left), clipY: Math.round(c.top),
-             clipW: Math.round(c.width), clipH: Math.round(c.height) };
-}
-function showCardPreview(entry) {
-    const api = mpApi();
-    if (!api || !entry) return;
-    const box = entry.el;
-    if (!cardVisible(box)) { api.hide({ id: entry.id }); box.classList.remove('has3d'); return; }
-    const rc = box.getBoundingClientRect();
-    const s = Math.floor(Math.min(rc.width, rc.height));
-
-    if (s < 20) { api.hide({ id: entry.id }); box.classList.remove('has3d'); return; }
-    const paths = meshPathsOf(entry.r);
-    if (!paths) return;
-    const opts = {
-        id: entry.id,
-
-        formType: 'STAT', matSwap: entry.r.matSwap || '',
-        x: Math.round(rc.left + (rc.width - s) / 2), y: Math.round(rc.top + (rc.height - s) / 2),
-        w: s, h: s, spin: 0, brightness: 1.25, zoom: 0.92,
-        ...clipToStrip()
-    };
-    if (paths.length > 1) opts.nifPaths = paths; else opts.nifPath = paths[0];
-    api.show(opts);
-    box.classList.add('has3d');
-}
-function syncCardPreviews() {
-    Object.keys(_mpCards).forEach(id => showCardPreview(_mpCards[id]));
-}
-function hideCardPreviews() {
-    const api = mpApi();
-    if (api) Object.keys(_mpCards).forEach(id => api.hide({ id: id }));
-    _mpCards = {};
-}
-
-function hookPreviewStatus() {
-    if (_mpStatusHooked) return;
-    const api = mpApi();
-    if (!api || typeof api.onStatus !== 'function') return;
-    _mpStatusHooked = true;
-    api.onStatus(s => {
-        if (!s || s.phase !== 'error') return;
-        const e = _mpCards[s.id];
-        if (e && e.el) e.el.classList.remove('has3d');
-        try { api.hide({ id: s.id }); } catch (err) {}
-    });
-}
-
-const CAT_SVG = {
-    'Structures':   '<path d="M3 20V9l9-5 9 5v11"/><path d="M3 12h18M9 20V12M15 20V12"/>',
-    'Furniture':    '<path d="M3 17v-5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v5"/><path d="M3 17h18M5 17v3M19 17v3M6 10V7h12v3"/>',
-    'Power':        '<path d="M13 2L5 14h6l-1 8 8-12h-6z"/>',
-    'Defense':      '<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/>',
-    'Resources':    '<path d="M12 3v18M12 8l5-3M12 14l-5-3"/><circle cx="12" cy="21" r="1"/>',
-    'Decorations':  '<rect x="4" y="4" width="16" height="16"/><path d="M4 15l4-4 4 4 3-3 5 5"/><circle cx="9" cy="9" r="1.4"/>',
-    'Food':         '<path d="M6 3v8a3 3 0 0 0 6 0V3M9 11v10"/><path d="M17 3c-1.5 2-2 4-2 6s.5 3 2 3v9"/>',
-    'Stores':       '<path d="M4 9h16l-1 11H5z"/><path d="M8 9V6a4 4 0 0 1 8 0v3"/>',
-    'Crafting':     '<path d="M14 7l3-3 3 3-3 3z"/><path d="M15 9L5 19l-2-2L13 7"/><path d="M4 4l4 4"/>',
-    'Raider':       '<path d="M12 3l9 16H3z"/><path d="M12 9v5M12 17h.01"/>',
-    'Special':      '<path d="M12 3l2.6 6.2 6.4.5-4.9 4.2 1.5 6.1L12 16.8 6.4 20l1.5-6.1L3 9.7l6.4-.5z"/>',
-    'Decor':        '<rect x="4" y="4" width="16" height="16"/><path d="M4 15l4-4 4 4 3-3 5 5"/><circle cx="9" cy="9" r="1.4"/>'
-};
-function catSvg(cat) {
-    const body = CAT_SVG[cat] || '<rect x="4" y="4" width="16" height="16"/><path d="M8 12h8"/>';
-    return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"
-        stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
 }
 
 const STAT_ICON_PATH = {
@@ -162,22 +87,15 @@ function statSvg(key) {
     return d ? `<svg viewBox="0 0 512 512" aria-hidden="true"><path fill="currentColor" d="${d}"/></svg>` : '';
 }
 
-function loadFavs() {
-    try {
-        const raw = JSON.parse(localStorage.getItem(FAV_KEY) || '[]');
-        favs = new Set(Array.isArray(raw) ? raw : []);
-    } catch (e) { favs = new Set(); }
-}
-function saveFavs() {
-    try { localStorage.setItem(FAV_KEY, JSON.stringify([...favs])); } catch (e) {}
-}
-function isFav(r) { return favs.has(keyOf(r)); }
-
 function toggleFav(r) {
+    // Must match the existing serialized favorite key; verify this against src/CobjCacheSerialization.cpp:RecipeJson.
     const k = keyOf(r); if (!k) return;
-    favs.has(k) ? favs.delete(k) : favs.add(k);
+    const owned = isFav(r);
+    favs.delete(k);
+    if (r.legacyFirst !== false) favs.delete(String(r.formRef));
+    if (!owned) favs.add(k);
     saveFavs(); renderFavCount();
-    if (favView) { renderStrip(); return; }
+    if (favView) { requestCatalogPage(catalogPage); return; }
     const i = currentView().findIndex(x => keyOf(x) === k);
     const star = document.querySelectorAll('#strip .card')[i]?.querySelector('.fav');
     if (star) star.classList.toggle('on', favs.has(k));
@@ -188,166 +106,153 @@ function renderFavCount() {
 }
 function toggleFavView() {
     favView = !favView;
-    if (favView) { currentCategory = 'All'; currentSub = 'All'; }
-    renderFavCount(); renderCats(); renderSubs(); renderStrip();
+    currentCategory = 'All'; currentSub = 'All';
+    resetCatalogNavigation();
+    renderFavCount(); requestCatalogPage(0);
 }
 
+let _scalePct = 100;
 let _scaleSettle = [];
 function applyScale(pct) {
     const p = Math.max(50, Math.min(200, parseInt(pct, 10) || 100));
+    _scalePct = p;
 
     document.documentElement.style.setProperty('--ui-user', String(p / 100));
 
     if (selectedItem) setTimeout(() => showLivePreview(selectedItem), 30);
     requestAnimationFrame(syncCardPreviews);
+    requestAnimationFrame(reportPanelRects);
     _scaleSettle.forEach(clearTimeout);
     _scaleSettle = [120, 300].map(ms => setTimeout(syncCardPreviews, ms));
     return p;
 }
-window.setUiScale = pct => {
-    let p = applyScale(pct);
-    try { localStorage.setItem(SCALE_KEY, String(p)); } catch (e) {}
-};
+window.setUiScale = pct => applyScale(pct);
 
 const WS_THEMES = ['tarkov', 'pipboy'];
-window.setTheme = name => {
-    const t = WS_THEMES.includes(name) ? name : 'tarkov';
-    WS_THEMES.forEach(x => document.body.classList.toggle('theme-' + x, x === t));
+const WS_THEME_LABEL = { tarkov: 'TARKOV', pipboy: 'PIP-BOY' };
+let _wsTheme = 'tarkov';
 
+function applyWsTheme(name, noPersist) {
+    _wsTheme = WS_THEMES.includes(name) ? name : 'tarkov';
+    WS_THEMES.forEach(x => document.body.classList.toggle('theme-' + x, x === _wsTheme));
+    const b = document.getElementById('themeBtn');
+    if (b) pcSetText(b, 'THEME: {{theme}}', {theme: pcText(WS_THEME_LABEL[_wsTheme] || _wsTheme.toUpperCase())});
+    if (!noPersist && window.saveTheme) { try { window.saveTheme(_wsTheme); } catch (e) {} }
     requestAnimationFrame(syncCardPreviews);
-};
+}
+function cycleTheme() {
+    applyWsTheme(WS_THEMES[(WS_THEMES.indexOf(_wsTheme) + 1) % WS_THEMES.length]);
+}
+window.setTheme = name => applyWsTheme(name, true);
+applyWsTheme('tarkov', true);
 function fsStep(dir) {
-    let cur = 100;
-    try { cur = parseInt(localStorage.getItem(SCALE_KEY), 10) || 100; } catch (e) {}
-    const next = applyScale(cur + dir * 10);
-    try { localStorage.setItem(SCALE_KEY, String(next)); } catch (e) {}
+    const next = applyScale(_scalePct + dir * 10);
     if (typeof window.saveUiScale === 'function') window.saveUiScale(String(next));
 }
 
-function modelPreview() {
-    const a = window.__prismaUI_modelPreview;
-    return (a && typeof a.show === 'function') ? a : null;
+function requestCatalogPage(page, selectLast = false) {
+    if (!catalogSession || typeof window.requestWorkshopPage !== 'function') return;
+    pendingNavigationEnd = selectLast;
+    const request = {
+        session: catalogSession, requestId: ++catalogRequestId,
+        search: currentSearch, category: currentCategory, sub: currentSub,
+        filter: filterMode, page: Math.max(0, page), pageSize: WORKSHOP_RENDER_LIMIT,
+        favoritesOnly: favView, favorites: favView ? [...favs].map(String) : []
+    };
+    window.requestWorkshopPage(JSON.stringify(request));
 }
-let _mpShown = false;
-function showLivePreview(r) {
-    const api = modelPreview();
-    const pane = document.getElementById('preview');
-    if (!api || !r || !r.nifPath) {
-        if (pane) pane.innerHTML = `<span class="pv-hint">${r ? 'No model for this item' : 'Select an item'}</span>`;
-        if (api && _mpShown) { try { api.hide({ id: 'wkdetail' }); } catch (e) {} _mpShown = false; }
-        return;
-    }
-    pane.innerHTML = '';
-    const rc = pane.getBoundingClientRect();
-    const s = Math.min(rc.width, rc.height);
-    const sx = Math.round(rc.left + (rc.width - s) / 2);
-    const sy = Math.round(rc.top + (rc.height - s) / 2);
-
-    api.show({
-        id: 'wkdetail', nifPath: r.nifPath, formType: 'STAT', matSwap: r.matSwap || '',
-        x: sx, y: sy, w: Math.round(s), h: Math.round(s), spin: 30, brightness: 1.15
-    });
-    _mpShown = true;
-}
-function hideLivePreview() {
-    const api = modelPreview();
-    if (api && _mpShown) { try { api.hide({ id: 'wkdetail' }); } catch (e) {} }
-    _mpShown = false;
-    const pane = document.getElementById('preview');
-    if (pane) pane.innerHTML = '<span class="pv-hint">Select an item</span>';
-    const meta = document.getElementById('pv-meta');
-    if (meta) meta.innerHTML = '<span class="dimtxt">No selection</span>';
-}
-window.addEventListener('resize', () => {
-    if (selectedItem) showLivePreview(selectedItem);
-    syncCardPreviews();
-    reportPanelRects();
-});
-
-function reportPanelRects() {
-    if (typeof window.prisma_panel_rects !== 'function') return;
-    const w = window.innerWidth, h = window.innerHeight;
-    if (!w || !h) return;
-    const out = [];
-
-    ['dock', 'controls'].forEach(id => {
-        const el = document.getElementById(id);
-        if (!el) return;
-        const r = el.getBoundingClientRect();
-        if (r.width <= 0 || r.height <= 0) return;
-        out.push([r.left / w, r.top / h, r.right / w, r.bottom / h]);
-    });
-    try { window.prisma_panel_rects(JSON.stringify(out)); } catch (e) {}
-}
-
-(() => {
-    if (typeof ResizeObserver !== 'function') return;
-    let queued = false;
-    const ro = new ResizeObserver(() => {
-        if (queued) return;
-        queued = true;
-        requestAnimationFrame(() => { queued = false; reportPanelRects(); });
-    });
-    ['dock', 'controls'].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) ro.observe(el);
-    });
-})();
-
-(() => {
-    if (typeof ResizeObserver !== 'function') return;
-    const pane = document.getElementById('preview');
-    if (!pane) return;
-    let queued = false;
-    new ResizeObserver(() => {
-        if (queued) return;
-        queued = true;
-        requestAnimationFrame(() => {
-            queued = false;
-            if (selectedItem) showLivePreview(selectedItem);
-            syncCardPreviews();
-        });
-    }).observe(pane);
-})();
-
-(() => {
-    const strip = document.getElementById('strip');
-    if (!strip) return;
-    let queued = false;
-    strip.addEventListener('scroll', () => {
-        if (queued) return;
-        queued = true;
-        requestAnimationFrame(() => { queued = false; syncCardPreviews(); });
-    });
-})();
-
-window.setBuildables = arg => {
-    try { allItems = (typeof arg === 'string') ? JSON.parse(arg) : (arg || []); } catch (e) { allItems = []; }
-    if (!Array.isArray(allItems)) allItems = [];
+function commitBuildables(data) {
+    _statsPoll = 0; _statsLastJson = ''; _cancelStatsPoll();
+    catalogPage = data.page;
+    catalogPageCount = data.pageCount;
+    catalogFacetTotal = data.facetTotal;
+    catalogCategories = data.categories;
+    catalogFavoriteCategories = data.favoriteCategories;
+    allItems = data.recipes;
+    pendingBuildables = '';
     allItems.forEach(r => { r.__cat = catOf(r); r.__sub = subOf(r); r.__disp = dName(r); });
 
-    let favsChanged = false;
-    const migrated = new Set();
-    favs.forEach(key => {
-        const item = allItems.find(r => String(r.formId) === String(key));
-        const stable = item?.recipeKey || key;
-        if (stable !== key) favsChanged = true;
-        migrated.add(stable);
-    });
-    if (favsChanged) { favs = migrated; saveFavs(); }
-
-    if (selectedItem) {
-        const k = keyOf(selectedItem), fid = selectedItem.formId;
-        selectedItem = allItems.find(r => keyOf(r) === k) || allItems.find(r => r.formId === fid) || null;
-    }
+    selectedItem = allItems.find(r => keyOf(r) === pendingSelectionKey) || null;
+    pendingSelectionKey = '';
     const sc = document.getElementById('siteCount');
-    if (sc) sc.textContent = `${allItems.length} units`;
+    if (sc) pcSetText(sc, '{{count}} units', {count: catalogFacetTotal});
     renderFavCount(); renderCats(); renderSubs(); renderStrip();
-    if (selectedItem) refreshMaterials(selectedItem);
-    console.log(`[WS] setBuildables: ${allItems.length} items`);
+    if (selectedItem) paintDetail(selectedItem);
+    else if (currentView().length) {
+        const item = pendingNavigationEnd ? currentView()[currentView().length - 1] : currentView()[0];
+        selectItem(item);
+    }
+    pendingNavigationEnd = false;
+    console.log(`[WS] workshop page ${catalogPage + 1}/${catalogPageCount}: ${allItems.length} items`);
+}
+window.beginBuildables = arg => {
+    let meta;
+    try { meta = JSON.parse(arg); } catch (e) { return; }
+    if (!meta || !Number.isSafeInteger(meta.session) || !Number.isSafeInteger(meta.requestId) ||
+        !Number.isSafeInteger(meta.serial) || !Number.isSafeInteger(meta.chunks) ||
+        meta.session < catalogSession || meta.chunks < 1 || meta.chunks > 256) return;
+    if (meta.session > catalogSession) {
+        catalogSession = meta.session;
+        catalogRequestId = 0;
+        catalogPage = 0;
+        catalogPageCount = 0;
+        lastBuildableSerial = 0;
+    }
+    if (meta.requestId !== catalogRequestId || meta.serial <= lastBuildableSerial) return;
+    lastBuildableSerial = meta.serial;
+    activeBuildableSerial = String(meta.serial);
+    activeBuildableRequestId = meta.requestId;
+    pendingSelectionKey = keyOf(selectedItem);
+    allItems = [];
+    selectedItem = null;
+    navIndex = -1;
+    hideLivePreview();
+    refreshMaterials(null);
+    const sc = document.getElementById('siteCount');
+    if (sc) pcSetText(sc, '{{count}} units', {count: 0});
+    renderFavCount(); renderCats(); renderSubs(); renderStrip();
+    pendingBuildables = '';
+    expectedBuildableChunks = meta.chunks;
+    receivedBuildableChunks = 0;
+    buildableDeliveryFailed = false;
+};
+window.appendBuildables = arg => {
+    if (buildableDeliveryFailed || !activeBuildableSerial ||
+        activeBuildableRequestId !== catalogRequestId || typeof arg !== 'string') return;
+    const sep = arg.indexOf(':');
+    if (sep < 0 || arg.slice(0, sep) !== activeBuildableSerial) return;
+    pendingBuildables += arg.slice(sep + 1);
+    if (pendingBuildables.length > 8 * 1024 * 1024) buildableDeliveryFailed = true;
+    ++receivedBuildableChunks;
+};
+window.finishBuildables = serial => {
+    if (!activeBuildableSerial || String(serial) !== activeBuildableSerial) return;
+    activeBuildableSerial = '';
+    if (activeBuildableRequestId !== catalogRequestId) return;
+    if (buildableDeliveryFailed || receivedBuildableChunks !== expectedBuildableChunks) {
+        console.error(`[WS] discarded incomplete workshop page: expected ${expectedBuildableChunks} chunk(s), received ${receivedBuildableChunks}`);
+        pendingBuildables = '';
+        if (typeof window.showError === 'function') {
+            window.showError('Workshop page failed to load. Refresh the cache.');
+        }
+        return;
+    }
+    let data;
+    try { data = JSON.parse(pendingBuildables); } catch (e) { data = null; }
+    if (!data || !Array.isArray(data.recipes) || data.recipes.length > WORKSHOP_RENDER_LIMIT ||
+        !Array.isArray(data.categories) || !Array.isArray(data.favoriteCategories) ||
+        !Number.isSafeInteger(data.total) ||
+        !Number.isSafeInteger(data.page) || !Number.isSafeInteger(data.pageCount) ||
+        !Number.isSafeInteger(data.facetTotal)) {
+        if (typeof window.showError === 'function') window.showError('Workshop page failed to load. Refresh the cache.');
+        return;
+    }
+    commitBuildables(data);
 };
 window.setPlacingMode = flag => {
     isPlacing = (String(flag) === '1');
+    const placeButton = document.getElementById('act-place');
+    if (placeButton) placeButton.disabled = false;
     if (isPlacing) {
         const q = document.getElementById('q'); if (q) q.blur();
 
@@ -365,21 +270,42 @@ window.updatePlayerResources = arg => {
     } catch (e) {}
 };
 
-const STAT_DEFS = [
-    { key: 'happiness',  label: 'Happy',   pct: true },
-    { key: 'population', label: 'Pop' },
-    { key: 'food',       label: 'Food' },
-    { key: 'water',      label: 'Water' },
-    { key: 'power',      label: 'Power' },
-    { key: 'defense',    label: 'Defense' },
-    { key: 'beds',       label: 'Beds' }
-];
+let _statsPoll = 0;
+let _statsPollTimer = 0;
+let _statsLastJson = '';
+const _STATS_POLL_MAX = 12;
+function _cancelStatsPoll() {
+    if (_statsPollTimer) { clearTimeout(_statsPollTimer); _statsPollTimer = 0; }
+}
+window.refreshWorkshopStats = () => {
+    _statsPoll = 0;
+    _statsLastJson = '';
+    _cancelStatsPoll();
+    try { if (window.requestWorkshopStats) window.requestWorkshopStats(''); } catch (e) {}
+};
 window.setWorkshopStats = arg => {
     const bar = document.getElementById('statbar'); if (!bar) return;
+    const raw = (typeof arg === 'string') ? arg : JSON.stringify(arg || {});
     let s;
-    try { s = (typeof arg === 'string') ? JSON.parse(arg) : (arg || {}); } catch (e) { s = {}; }
+    try { s = JSON.parse(raw); } catch (e) { s = {}; }
 
     if (!s || typeof s.population !== 'number' || s.population < 0) { bar.hidden = true; return; }
+
+    _cancelStatsPoll();
+    const settled = s.population > 0 && raw === _statsLastJson;
+    _statsLastJson = raw;
+    if (!settled && _statsPoll < _STATS_POLL_MAX) {
+        _statsPoll++;
+        _statsPollTimer = setTimeout(() => {
+            _statsPollTimer = 0;
+            try { if (window.requestWorkshopStats) window.requestWorkshopStats(''); } catch (e) {}
+        }, 800);
+    }
+
+    renderWorkshopStats(s);
+};
+function renderWorkshopStats(s) {
+    const bar = document.getElementById("statbar");
     const pop = s.population, unassigned = Math.max(0, s.unassigned || 0);
 
     const need = { food: pop, water: pop, beds: pop };
@@ -396,7 +322,7 @@ window.setWorkshopStats = arg => {
             const happy = v >= 60;
             ico = `<span class="face ${happy ? 'face-happy' : 'face-sad'}"></span>`;
         } else if (d.key === 'population') {
-            txt = String(v) + (unassigned ? ` <i>(${unassigned} idle)</i>` : '');
+            txt = String(v) + (unassigned ? ` <i>${esc(pcText('({{count}} idle)', {count: unassigned}))}</i>` : '');
         } else if (d.key === 'power') {
             txt = String(v);
         } else if (d.key === 'defense') {
@@ -407,256 +333,56 @@ window.setWorkshopStats = arg => {
             txt = `${v}/${n}`;
             cls = v >= n ? 'ok' : 'bad';
         }
-        html += `<div class="stat ${cls}" title="${d.label}">` +
+        html += `<div class="stat ${cls}" title="${esc(pcText(d.label))}">` +
                 `<span class="s-ic">${ico || statSvg(d.key)}</span>` +
-                `<span class="s-lb">${d.label}</span>` +
+                `<span class="s-lb">${esc(pcText(d.label))}</span>` +
                 `<span class="s-vl">${txt}</span></div>`;
     });
     bar.innerHTML = html;
     bar.hidden = !html;
-};
-window.showError = msg => {
+}
+let _errTimer;
+function showMatsLine(cls, msg, vars) {
+    clearTimeout(_errTimer);
     const b = document.getElementById('materials-box'); if (!b) return;
-    b.innerHTML = `<span class="err">${esc(msg)}</span>`;
-    setTimeout(() => {
-        selectedItem ? refreshMaterials(selectedItem) : (b.innerHTML = '<span class="dimtxt">Select an item.</span>');
+    b.innerHTML = `<span class="${cls}">${esc(pcText(msg, vars))}</span>`;
+    _errTimer = setTimeout(() => {
+        selectedItem ? refreshMaterials(selectedItem) : (b.innerHTML = `<span class="dimtxt">${esc(pcText("Select an item."))}</span>`);
     }, 3000);
+}
+window.showError = msg => showMatsLine('err', msg);
+window.showHudNotice = arg => {
+    let d; try { d = typeof arg === 'string' ? JSON.parse(arg) : arg; } catch (e) { return; }
+    if (d && typeof d.key === 'string') showMatsLine('notice', d.key, d.vars);
 };
 
-function baseSet() { return favView ? allItems.filter(isFav) : allItems; }
-function renderCats() {
-    const row = document.getElementById('cat-row'); if (!row) return;
-    if (favView) { row.innerHTML = '<div class="sub-empty">Showing favorites &mdash; click the star again to leave</div>'; return; }
-    const counts = {};
-    allItems.forEach(r => { counts[r.__cat] = (counts[r.__cat] || 0) + 1; });
-    if (currentCategory !== 'All' && !counts[currentCategory]) { currentCategory = 'All'; currentSub = 'All'; }
-    const cats = ['All'].concat(Object.keys(counts).sort());
-    row.innerHTML = '';
-    cats.forEach(c => {
-        const b = document.createElement('div');
-        b.className = 'cat' + (c === currentCategory ? ' active' : '');
-        const n = (c === 'All') ? allItems.length : counts[c];
-        b.innerHTML = `<span>${esc(c)}</span><span class="n">${n}</span>`;
-        b.onclick = () => { currentCategory = c; currentSub = 'All'; navIndex = -1; renderCats(); renderSubs(); renderStrip(); };
-        row.appendChild(b);
-    });
-}
-function subsFor(cat) {
-    const counts = {};
-    baseSet().forEach(r => { if (cat === 'All' || r.__cat === cat) counts[r.__sub] = (counts[r.__sub] || 0) + 1; });
-    return counts;
-}
-function renderSubs() {
-    const row = document.getElementById('sub-row'); if (!row) return;
-
-    if (currentCategory === 'All' && !favView) {
-        currentSub = 'All';
-        row.innerHTML = '<div class="sub-empty">Pick a category to filter by sub-type</div>';
-        return;
-    }
-    const counts = subsFor(currentCategory);
-    const keys = Object.keys(counts).sort();
-    if (currentSub !== 'All' && !counts[currentSub]) currentSub = 'All';
-    row.innerHTML = '';
-    if (keys.length <= 1) { row.innerHTML = '<div class="sub-empty">No sub-categories</div>'; return; }
-    ['All'].concat(keys).forEach(s => {
-        const b = document.createElement('div');
-        b.className = 'sub' + (s === currentSub ? ' active' : '');
-        b.textContent = s;
-        b.onclick = () => { currentSub = s; navIndex = -1; renderSubs(); renderStrip(); };
-        row.appendChild(b);
-    });
-}
-function setFilter(f) {
-    filterMode = f;
-    document.querySelectorAll('.lk-btn').forEach(b => b.classList.toggle('active', b.dataset.f === f));
-    navIndex = -1; renderStrip();
-}
-function clearSearch() {
-    const q = document.getElementById('q');
-    if (q) { q.value = ''; currentSearch = ''; }
-    document.querySelector('.search')?.classList.remove('has');
-    navIndex = -1; renderStrip();
-}
-
-function currentView() {
-    let v = baseSet();
-    if (currentSearch) { const s = currentSearch.toLowerCase(); v = v.filter(r => r.__disp.toLowerCase().includes(s)); }
-    if (!favView && currentCategory !== 'All') v = v.filter(r => r.__cat === currentCategory);
-    if (currentSub !== 'All') v = v.filter(r => r.__sub === currentSub);
-    if (filterMode === 'BUILDABLE') v = v.filter(isCraftable);
-    else if (filterMode === 'LOCKED') v = v.filter(r => !isCraftable(r));
-    return v;
-}
-function costSummary(r) {
-    const comps = r.components || [];
-    if (!comps.length) return { text: 'Free', short: false };
-    let short = false;
-    comps.forEach(c => { if ((c.have || 0) < (c.count || 0)) short = true; });
-    const first = comps[0];
-    const extra = comps.length > 1 ? ` +${comps.length - 1}` : '';
-    return { text: `${cleanName(first.name)} x${first.count || 0}${extra}`, short };
-}
-function renderStrip() {
-    const strip = document.getElementById('strip'); if (!strip) return;
-    const view = currentView();
-    if (selectedItem && !view.some(r => keyOf(r) === keyOf(selectedItem))) { selectedItem = null; hideLivePreview(); }
-
-    hideCardPreviews();
-    strip.innerHTML = '';
-    if (!view.length) {
-        strip.innerHTML = `<div class="empty">${favView && !favs.size ? 'No favorites yet — press F on an item' : 'Nothing matches the current filters'}</div>`;
-        return;
-    }
-    view.forEach((item, i) => {
-        const card = document.createElement('div');
-        const buildable = isCraftable(item);
-        card.className = 'card' + (selectedItem && keyOf(item) === keyOf(selectedItem) ? ' sel' : '') + (buildable ? '' : ' locked');
-        card.style.animationDelay = Math.min(i, 14) * 12 + 'ms';
-        const cs = costSummary(item);
-        const col = CAT_COLOR[item.__cat] || 'var(--accent-d)';
-        card.innerHTML =
-            `<span class="edge" style="background:${col}"></span>` +
-            (item.locked ? '<span class="lk">Locked</span>' : '') +
-            `<span class="fav${isFav(item) ? ' on' : ''}">&#9733;</span>` +
-            `<span class="ico"><span class="ico-svg">${catSvg(item.__cat)}</span></span>` +
-            `<span class="nm">${esc(item.__disp)}</span>` +
-            `<span class="cost ${cs.short ? 'short' : 'ok'}">${esc(cs.text)}</span>`;
-        card.onclick = () => selectItem(item, false);
-        card.querySelector('.fav').onclick = e => { e.stopPropagation(); toggleFav(item); };
-        strip.appendChild(card);
-
-        if (meshPathsOf(item)) {
-
-            const id = 'wk_' + keyOf(item).replace(/[^A-Za-z0-9]/g, c => '_' + c.charCodeAt(0) + '_');
-            _mpCards[id] = { id: id, el: card.querySelector('.ico'), r: item };
-        }
-    });
-    hookPreviewStatus();
-
-    requestAnimationFrame(syncCardPreviews);
-
-    settleSync();
-}
-
-let _settleTimers = [];
-function settleSync() {
-    _settleTimers.forEach(clearTimeout);
-    _settleTimers = [120, 300, 500].map(ms => setTimeout(syncCardPreviews, ms));
-}
-function nudge(dir) {
-    const strip = document.getElementById('strip'); if (!strip) return;
-    strip.scrollLeft += dir * strip.clientWidth * 0.7;
-}
-
-function markSelection(i) {
-    const cards = document.querySelectorAll('#strip .card');
-    cards.forEach((c, n) => c.classList.toggle('sel', n === i));
-    const card = cards[i];
-    if (card && card.scrollIntoView) card.scrollIntoView({ block: 'nearest', inline: 'center' });
-}
-
-function paintDetail(item) {
-    const meta = document.getElementById('pv-meta');
-    if (meta) meta.innerHTML = `<span class="pv-name">${esc(item.__disp)}</span>` +
-        `<span class="pv-path">${esc(menuPathOf(item) || item.__cat)}</span>`;
-    refreshMaterials(item);
-    showLivePreview(item);
-}
-function refreshMaterials(item) {
-    const box = document.getElementById('materials-box'); if (!box) return;
-    const forEl = document.getElementById('req-for');
-    if (forEl) forEl.textContent = item ? item.__disp : '';
-    const comps = item?.components || [];
-    let html = '';
-
-    comps.forEach(c => {
-        const need = c.count || 0;
-        const have = (typeof c.have === 'number') ? c.have : (playerResources[cleanName(c.name).toLowerCase()] || 0);
-        const stored = (typeof c.stored === 'number') ? c.stored : have;
-        const carried = Math.max(0, have - stored);
-        const tip = carried > 0 ? `${stored} stored in the workshop, ${carried} carried by you` : `${have} stored in the workshop`;
-        html += `<span class="mchip ${have < need ? 'short' : 'ok'}" title="${esc(tip)}">` +
-                `<span class="mn">${esc(cleanName(c.name))}</span><span class="mq">${have}/${need}</span></span>`;
-    });
-    (item?.perks || []).forEach(p => {
-        html += `<span class="mchip perkchip${p.owned ? '' : ' miss'}"><span class="mn">${esc(p.name)}</span></span>`;
-    });
-    box.innerHTML = html || '<span class="dimtxt">No materials required.</span>';
-}
-
-function selectItem(item, place) {
+function selectItem(item) {
     selectedItem = item;
     navIndex = currentView().findIndex(r => keyOf(r) === keyOf(item));
     markSelection(navIndex);
     paintDetail(item);
-    if (!place) return;
-
-    if (!isCraftable(item)) {
-        if (typeof window.showError === 'function') window.showError(item.locked ? 'Locked' : 'Not enough materials');
-        return;
-    }
-    if (typeof window.prisma_build_item === 'function')
-        window.prisma_build_item(`${item.formId},${item.created}`);
 }
 
 function actPlace() {
-    if (selectedItem) selectItem(selectedItem, true);
+    if (isPlacing) {
+        if (typeof window.prisma_place === 'function') window.prisma_place('');
+        return;
+    }
+    const placeIndex = validPlacementSelectionIndex(currentView(), selectedItem, navIndex);
+    if (placeIndex < 0) { navIndex = -1; return; }
+    navSelect(placeIndex, true);
 }
 
 function actCancel() {
     if (typeof window.prisma_cancel === 'function') window.prisma_cancel('');
 }
 
-function scrapOverlayEl() { return document.getElementById('scrap-overlay'); }
-function isScrapOverlayOpen() {
-    const el = scrapOverlayEl();
-    return !!(el && !el.hidden);
-}
-function actScrapConfirm() {
-    if (typeof window.prisma_scrap === 'function') window.prisma_scrap('');
-}
-function actScrapCancel() {
-    if (typeof window.prisma_scrap_cancel === 'function') window.prisma_scrap_cancel('');
-}
-window.actScrapConfirm = actScrapConfirm;
-window.actScrapCancel = actScrapCancel;
-window.showScrapConfirm = arg => {
-    const el = scrapOverlayEl();
-    if (!el) return;
-    let d; try { d = typeof arg === 'string' ? JSON.parse(arg) : (arg || {}); } catch (e) { return; }
-    const title = document.getElementById('scrap-title');
-    const box = document.getElementById('scrap-yields');
-    const count = document.getElementById('scrap-count');
-    if (title) title.textContent = d.name || '';
-    const yields = Array.isArray(d.yields) ? d.yields : [];
-    if (count) count.textContent =
-        `${yields.length} RECOVERABLE MATERIAL${yields.length === 1 ? '' : 'S'}`;
-    if (!box) { el.hidden = false; return; }
-    if (!yields.length) {
-        box.innerHTML = '<span class="dimtxt">No components returned.</span>';
-    } else {
-        box.innerHTML = yields.map(y =>
-            `<div class="scrap-line">` +
-            `<span class="scrap-line-name">${esc(cleanName(y.name))}</span>` +
-            `<span class="scrap-line-add">+${y.add}</span>` +
-            `<span class="scrap-line-stored">${y.stored} STORED</span>` +
-            `</div>`
-        ).join('');
-    }
-    el.hidden = false;
-};
-window.hideScrapConfirm = () => {
-    const el = scrapOverlayEl();
-    if (el) el.hidden = true;
-};
-
 function actScrap() {
     if (typeof window.prisma_scrap === 'function') window.prisma_scrap('');
 }
 
 function actTag() {
-    if (selectedItem && typeof window.prisma_tag === 'function') window.prisma_tag(String(selectedItem.formId));
+    if (selectedItem && typeof window.prisma_tag === 'function') window.prisma_tag(String(selectedItem.formRef));
 }
 function closeHelper() {
 
@@ -668,8 +394,8 @@ function closeHelper() {
 document.getElementById('q').addEventListener('input', e => {
     currentSearch = e.target.value;
     document.querySelector('.search')?.classList.toggle('has', !!currentSearch);
-    navIndex = -1;
-    renderStrip();
+    resetCatalogNavigation();
+    requestCatalogPage(0);
 });
 
 (() => {
@@ -681,21 +407,13 @@ document.getElementById('q').addEventListener('input', e => {
 document.getElementById('refresh-cache-btn').addEventListener('click', () => {
     if (typeof window.requestBuildables === 'function') window.requestBuildables('');
 });
-document.addEventListener('keydown', e => {
-    if (e.key === 'Escape' || e.key === 'Tab') {
-        if (isScrapOverlayOpen()) {
-            e.preventDefault();
-            e.stopImmediatePropagation();
-            actScrapCancel();
-            return;
-        }
-        if (isPlacing) return;
-        closeHelper();
-    }
-}, true);
-
 function navSelect(i, ghost) {
+    if (ghost && isPlacing) return;
     const view = currentView(); if (!view.length) return;
+    if (i < 0 && catalogPage > 0) { requestCatalogPage(catalogPage - 1, true); return; }
+    if (i >= view.length && catalogPage + 1 < catalogPageCount) {
+        requestCatalogPage(catalogPage + 1); return;
+    }
     if (i < 0) i = 0; if (i >= view.length) i = view.length - 1;
     navIndex = i;
     const item = view[i];
@@ -709,39 +427,16 @@ function navSelect(i, ghost) {
         return;
     }
     if (typeof window.prisma_build_item === 'function')
-        window.prisma_build_item(`${item.formId},${item.created}`);
+        window.prisma_build_item(`${item.formRef},${item.created}`);
 }
 function cycleCategory(dir) {
     if (favView) return;
-    const counts = {};
-    allItems.forEach(r => { counts[r.__cat] = (counts[r.__cat] || 0) + 1; });
-    const cats = ['All'].concat(Object.keys(counts).sort());
+    const cats = ['All'].concat(catalogCategories.map(c => c.cat));
     let i = cats.indexOf(currentCategory); if (i < 0) i = 0;
     currentCategory = cats[(i + dir + cats.length) % cats.length];
-    currentSub = 'All'; navIndex = -1;
-    renderCats(); renderSubs(); renderStrip();
+    currentSub = 'All'; resetCatalogNavigation();
+    requestCatalogPage(0);
 }
-document.addEventListener('keydown', e => {
-    if (isScrapOverlayOpen()) {
-        if (e.key === 'Escape' || e.key === 'Tab') { }
-        else e.preventDefault();
-        return;
-    }
-
-    const ae = document.activeElement;
-    if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA')) return;
-    if (e.ctrlKey || e.altKey || e.metaKey) return;
-    const k = (e.key || '').toLowerCase();
-    if (k === 'a')      { navSelect(navIndex <= 0 ? 0 : navIndex - 1, false); e.preventDefault(); }
-    else if (k === 'd') { navSelect(navIndex < 0 ? 0 : navIndex + 1, false); e.preventDefault(); }
-    else if (k === 'w') { cycleCategory(-1); e.preventDefault(); }
-    else if (k === 's') { cycleCategory(1);  e.preventDefault(); }
-    else if (k === 'f') { if (selectedItem) { toggleFav(selectedItem); e.preventDefault(); } }
-    else if (k === 'q') { if (selectedItem) { actTag(); e.preventDefault(); } }
-    else if (k === 'e' || k === 'enter') { if (navIndex >= 0) { navSelect(navIndex, true); e.preventDefault(); } }
-});
-
-
 function toggleControls() {
     const c = document.getElementById('controls');
     if (!c) return;
@@ -753,10 +448,11 @@ window.setFreeState = arg => {
     let d; try { d = typeof arg === 'string' ? JSON.parse(arg) : (arg || {}); } catch (e) { return; }
     const set = (id, v) => {
         const el = document.getElementById(id);
-        if (el) { el.textContent = v ? 'ON' : 'off'; el.classList.toggle('on', !!v); }
+        if (el) { pcSetText(el, v ? 'ON' : 'off'); el.classList.toggle('on', !!v); }
     };
     set('st-place', d.place);
     set('st-cam', d.cam);
+    window.workshopFreeCam = !!d.cam;
 
     if ('gsnap' in d) set('st-snap', !d.gsnap);
     if ('osnap' in d) set('st-osnap', d.osnap);
@@ -764,10 +460,8 @@ window.setFreeState = arg => {
 
 (function init() {
     loadFavs();
-    let p = 100; try { p = parseInt(localStorage.getItem(SCALE_KEY), 10) || 100; } catch (e) {}
-    applyScale(p);
+    applyScale(100);
     renderFavCount();
-    if (typeof window.requestBuildables === 'function') window.requestBuildables('');
 
     const dock = document.getElementById('dock');
     if (dock) {
@@ -778,11 +472,39 @@ window.setFreeState = arg => {
             requestAnimationFrame(() => { queued = false; syncCardPreviews(); reportPanelRects(); });
         });
     }
+    function ensureDockOnScreen() {
+        const d = document.getElementById('dock');
+        if (!d) return;
+        const vw = window.innerWidth, vh = window.innerHeight;
+        if (vw < 2 || vh < 2) return;
+        const r = d.getBoundingClientRect();
+        const off = r.bottom <= 0 || r.top >= vh || r.right <= 0 || r.left >= vw;
+        const tiny = r.width < 40 || r.height < 40;
+        if (off || tiny) {
+            document.documentElement.style.setProperty('--ui-user', '1');
+            d.style.position = 'absolute';
+            d.style.left = '0'; d.style.right = '0'; d.style.bottom = '0';
+            d.style.top = 'auto'; d.style.transform = 'none';
+            reportPanelRects();
+            console.log('[WS] dock was off-screen or collapsed; reset to safe bottom dock');
+        }
+    }
     function ready() {
         try { if (window.prisma_loaded) window.prisma_loaded(''); } catch (e) {}
-
+        ensureDockOnScreen();
         reportPanelRects();
     }
+    window.addEventListener('resize', () => setTimeout(ensureDockOnScreen, 60));
     if (document.readyState === 'complete') ready(); else window.addEventListener('load', () => setTimeout(ready, 30));
     console.log('[WS] workshop.js loaded (bottom dock, two-level categories, favorites)');
 })();
+
+window.refreshTranslations = () => {
+    allItems.forEach(r => { r.__disp = dName(r); });
+    renderCats(); renderSubs(); renderStrip();
+    if (selectedItem) paintDetail(selectedItem);
+    pcSetText(document.getElementById('themeBtn'), 'THEME: {{theme}}', {theme: pcText(WS_THEME_LABEL[_wsTheme])});
+    if (_statsLastJson) renderWorkshopStats(JSON.parse(_statsLastJson));
+    if (window.workshopPromptData) window.setWorkshopPrompts(window.workshopPromptData);
+    if (scrapTranslationData && isScrapOverlayOpen()) renderScrapConfirm(scrapTranslationData);
+};

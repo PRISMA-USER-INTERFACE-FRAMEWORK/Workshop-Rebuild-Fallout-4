@@ -2,8 +2,13 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>RobCo Construction Module</title>
+    <title data-l10n="RobCo Construction Module">RobCo Construction Module</title>
     <link rel="stylesheet" href="css/workshop.css">
+    <link rel="stylesheet" href="prisma_controller_glyphs.css">
+    <style>
+      /* scrollChipIntoView uses offsetLeft; make each scrolling row the offset parent. */
+      .cat-row, .sub-row { position: relative; }
+    </style>
 </head>
 <body>
 <div id="app">
@@ -12,109 +17,115 @@
     <div class="rail">
       <div class="brand">
         <span class="chev">&#x25B8;</span>
-        <span class="brand-txt">Construction</span>
-        <span class="brand-sub" id="siteCount">0 units</span>
+        <span class="brand-txt" data-l10n="Construction">Construction</span>
+        <span class="brand-sub" id="siteCount" data-l10n="0 units">0 units</span>
       </div>
 
-      <div id="cat-row" class="cat-row"></div>
+      <div class="row-scroll" id="cat-scroll">
+        <button class="row-arrow" id="cat-prev" type="button" title="Previous categories" data-l10n-title="Previous categories">&#x25C0;</button>
+        <div id="cat-row" class="cat-row"></div>
+        <button class="row-arrow" id="cat-next" type="button" title="More categories" data-l10n-title="More categories">&#x25B6;</button>
+      </div>
 
       <div class="rail-right">
         <button class="fav-tab" id="fav-tab" onclick="toggleFavView()">
-          <span class="star">&#9733;</span><span>Favorites</span><span class="cnt" id="fav-count">0</span>
+          <span class="star">&#9733;</span><span data-l10n="Favorites">Favorites</span><span class="cnt" id="fav-count">0</span>
         </button>
+        <button class="theme-tab" id="themeBtn" onclick="cycleTheme()" data-l10n="THEME: TARKOV">THEME: TARKOV</button>
         <div class="fs-ctl">
-          <button class="fs-btn" onclick="fsStep(-1)" title="Smaller">A&minus;</button>
-          <button class="fs-btn" onclick="fsStep(1)" title="Larger">A+</button>
+          <button class="fs-btn" onclick="fsStep(-1)" title="Smaller" data-l10n-title="Smaller" data-l10n="A−">A&minus;</button>
+          <button class="fs-btn" onclick="fsStep(1)" title="Larger" data-l10n-title="Larger" data-l10n="A+">A+</button>
         </div>
-        <button class="icon-btn" id="refresh-cache-btn" title="Rescan buildables">&#x21BB;</button>
+        <button class="icon-btn" id="refresh-cache-btn" title="Rescan buildables" data-l10n-title="Rescan buildables">&#x21BB;</button>
         <button class="close-btn" onclick="closeHelper()">
-          <span class="text">Exit</span><span class="x-box">&#10005;</span>
+          <span class="text" data-l10n="Exit">Exit</span><span class="x-box">&#10005;</span>
         </button>
       </div>
     </div>
 
     <div class="subbar">
-      <div id="sub-row" class="sub-row"></div>
+      <div class="row-scroll" id="sub-scroll">
+        <button class="row-arrow" id="sub-prev" type="button" title="Previous sub-categories" data-l10n-title="Previous sub-categories">&#x25C0;</button>
+        <div id="sub-row" class="sub-row"></div>
+        <button class="row-arrow" id="sub-next" type="button" title="More sub-categories" data-l10n-title="More sub-categories">&#x25B6;</button>
+      </div>
       <div class="tools">
         <div class="lk-group">
-          <button class="lk-btn active" data-f="ALL" onclick="setFilter('ALL')">All</button>
-          <button class="lk-btn" data-f="BUILDABLE" onclick="setFilter('BUILDABLE')">Buildable</button>
-          <button class="lk-btn" data-f="LOCKED" onclick="setFilter('LOCKED')">Locked</button>
+          <button class="lk-btn active" data-f="ALL" onclick="setFilter('ALL')" data-l10n="All">All</button>
+          <button class="lk-btn" data-f="BUILDABLE" onclick="setFilter('BUILDABLE')" data-l10n="Buildable">Buildable</button>
+          <button class="lk-btn" data-f="LOCKED" onclick="setFilter('LOCKED')" data-l10n="Locked">Locked</button>
         </div>
         <label class="search">
           <span class="s-ico">&#9906;</span>
 
-          <input id="q" type="text" placeholder="Search structures..." autocomplete="off" spellcheck="false" onfocus="imeFocus(this)">
+          <input id="q" type="text" maxlength="256" placeholder="Search structures..." data-l10n-placeholder="Search structures..." autocomplete="off" spellcheck="false" onfocus="imeFocus(this)">
           <span class="s-clear" id="s-clear" onclick="clearSearch()">&#10005;</span>
         </label>
       </div>
     </div>
 
-
     <div class="statbar" id="statbar" hidden></div>
-
 
     <div class="controls" id="controls">
       <button class="ctl-toggle" onclick="toggleControls()" aria-expanded="false"
-              title="Free build controls">
-        <span class="ctl-label">Free build</span><span class="ctl-arrow" aria-hidden="true"></span>
+              title="Free build controls" data-l10n-title="Free build controls">
+        <span class="ctl-label" data-l10n="Free build">Free build</span><span class="ctl-arrow" aria-hidden="true"></span>
       </button>
       <div class="ctl-body" id="ctl-body">
-        <div class="ctl-grp"><div class="ctl-h">Toggles</div>
-          <div class="ctl"><span class="k">F3</span><span class="d">Place in red / yellow pickup</span><span class="st" id="st-place">off</span></div>
-          <div class="ctl"><span class="k">F4</span><span class="d">Free camera</span><span class="st" id="st-cam">off</span></div>
-          <div class="ctl"><span class="k">F6</span><span class="d">Free height &mdash; place at aimed height (off = snap to floor)</span><span class="st" id="st-snap">off</span></div>
-          <div class="ctl"><span class="k">Shift+F6</span><span class="d">Object snap &mdash; snap to nearby build pieces</span><span class="st on" id="st-osnap">on</span></div>
-          <div class="ctl"><span class="k">F7</span><span class="d">Reset transform / vertical override</span></div>
+        <div class="ctl-grp"><div class="ctl-h" data-l10n="Toggles">Toggles</div>
+          <div class="ctl"><span class="k">F3</span><span class="d" data-l10n="Place in red / yellow pickup">Place in red / yellow pickup</span><span class="st" id="st-place" data-l10n="off">off</span></div>
+          <div class="ctl"><span class="k">F4</span><span class="d" data-l10n="Free camera">Free camera</span><span class="st" id="st-cam" data-l10n="off">off</span></div>
+          <div class="ctl"><span class="k">F6</span><span class="d" data-l10n="Free height — place at aimed height (off = snap to floor)">Free height &mdash; place at aimed height (off = snap to floor)</span><span class="st" id="st-snap" data-l10n="off">off</span></div>
+          <div class="ctl"><span class="k">Shift+F6</span><span class="d" data-l10n="Object snap — snap to nearby build pieces">Object snap &mdash; snap to nearby build pieces</span><span class="st on" id="st-osnap" data-l10n="on">on</span></div>
+          <div class="ctl"><span class="k">F7</span><span class="d" data-l10n="Reset transform / vertical override">Reset transform / vertical override</span></div>
         </div>
-        <div class="ctl-grp"><div class="ctl-h">Transform</div>
-          <div class="ctl"><span class="k">Num 4/8/7</span><span class="d">Rotate yaw / pitch / roll</span></div>
-          <div class="ctl"><span class="k">Home/End</span><span class="d">Move forward / back</span></div>
-          <div class="ctl"><span class="k">Ins/Del</span><span class="d">Move right / left</span></div>
-          <div class="ctl"><span class="k">PgUp/PgDn</span><span class="d">Move up / down</span></div>
-          <div class="ctl"><span class="k">+ / &minus;</span><span class="d">Scale</span></div>
-          <div class="ctl ctl-note"><span class="k">Shift</span><span class="d">Reverse rotation direction</span></div>
+        <div class="ctl-grp"><div class="ctl-h" data-l10n="Transform">Transform</div>
+          <div class="ctl"><span class="k">Num 4/8/7</span><span class="d" data-l10n="Rotate yaw / pitch / roll">Rotate yaw / pitch / roll</span></div>
+          <div class="ctl"><span class="k">Home/End</span><span class="d" data-l10n="Move forward / back">Move forward / back</span></div>
+          <div class="ctl"><span class="k">Ins/Del</span><span class="d" data-l10n="Move right / left">Move right / left</span></div>
+          <div class="ctl"><span class="k">PgUp/PgDn</span><span class="d" data-l10n="Move up / down">Move up / down</span></div>
+          <div class="ctl"><span class="k">+ / &minus;</span><span class="d" data-l10n="Scale">Scale</span></div>
+          <div class="ctl ctl-note"><span class="k">Shift</span><span class="d" data-l10n="Reverse rotation direction">Reverse rotation direction</span></div>
         </div>
       </div>
     </div>
 
     <div class="body">
       <div class="pv-wrap">
-        <div class="preview" id="preview"><span class="pv-hint">Select an item</span></div>
-        <div class="pv-meta" id="pv-meta"><span class="dimtxt">No selection</span></div>
+        <div class="preview" id="preview"><span class="pv-hint" data-l10n="Select an item">Select an item</span></div>
+        <div class="pv-meta" id="pv-meta"><span class="dimtxt" data-l10n="No selection">No selection</span></div>
       </div>
 
       <div class="strip-wrap">
-        <button class="nudge l" onclick="nudge(-1)" title="Previous">&#8249;</button>
+        <button class="nudge l" onclick="nudge(-1)" title="Previous" data-l10n-title="Previous">&#8249;</button>
         <div id="strip" class="strip"></div>
-        <button class="nudge r" onclick="nudge(1)" title="Next">&#8250;</button>
+        <button class="nudge r" onclick="nudge(1)" title="Next" data-l10n-title="Next">&#8250;</button>
       </div>
     </div>
 
     <div class="reqbar">
       <div class="req-head">
-        <span class="req-title">Requirements</span>
+        <span class="req-title" data-l10n="Requirements">Requirements</span>
         <span class="req-for" id="req-for"></span>
       </div>
-      <div id="materials-box" class="mats"><span class="dimtxt">Select an item.</span></div>
-
+      <div id="materials-box" class="mats"><span class="dimtxt" data-l10n="Select an item.">Select an item.</span></div>
 
       <div class="actionbar">
         <div class="act-row">
           <button class="act" id="act-place"  onclick="actPlace()">
-            <span class="k">Enter</span><span class="l">Place</span></button>
+            <span class="k">Enter</span><span class="l" data-l10n="Place">Place</span></button>
           <button class="act" id="act-cancel" onclick="actCancel()">
-            <span class="k">Tab</span><span class="l">Cancel</span></button>
+            <span class="k">Tab</span><span class="l" data-l10n="Cancel">Cancel</span></button>
           <button class="act" id="act-scrap"  onclick="actScrap()">
-            <span class="k">R</span><span class="l">Scrap</span></button>
-          <button class="act" id="act-tag"    onclick="actTag()" title="Favorite this recipe so the game highlights items that provide its components">
-            <span class="k">Q</span><span class="l">Tag for Search</span></button>
+            <span class="k">R</span><span class="l" data-l10n="Scrap">Scrap</span></button>
+          <button class="act" id="act-tag"    onclick="actTag()" title="Favorite this recipe so the game highlights items that provide its components" data-l10n-title="Favorite this recipe so the game highlights items that provide its components">
+            <span class="k">Q</span><span class="l" data-l10n="Tag for Search">Tag for Search</span></button>
           <button class="act act-exit" id="act-exit" onclick="closeHelper()">
-            <span class="k">Esc</span><span class="l">Exit</span></button>
+            <span class="k">Esc</span><span class="l" data-l10n="Exit">Exit</span></button>
         </div>
-        <div class="hint">
-          <b>C</b> cursor <i>/</i> <b>A</b><b>D</b> browse <i>/</i> <b>W</b><b>S</b> category
-          <i>/</i> click <i>=</i> inspect <i>/</i> <b>E</b> <i>=</i> place <i>/</i> <b>F</b> favorite
+        <div class="hint" id="controller-hint">
+          <b>C</b> <span data-l10n="cursor">cursor</span> <i>/</i> <b>A</b><b>D</b> <span data-l10n="browse">browse</span> <i>/</i> <b>W</b><b>S</b> <span data-l10n="category">category</span>
+          <i>/</i> <span data-l10n="click">click</span> <i>=</i> <span data-l10n="inspect">inspect</span> <i>/</i> <b>E</b> <i>=</i> <span data-l10n="place">place</span> <i>/</i> <b>F</b> <span data-l10n="favorite">favorite</span>
         </div>
       </div>
     </div>
@@ -125,27 +136,32 @@
     <div class="scrap-scrim"></div>
     <div class="scrap-panel" role="dialog" aria-modal="true" aria-labelledby="scrap-title">
       <div class="scrap-terminal-head">
-        <span>SALVAGE AUTHORIZATION</span>
-        <span class="scrap-session">WORKSHOP TERMINAL</span>
+        <span data-l10n="SALVAGE AUTHORIZATION">SALVAGE AUTHORIZATION</span>
+        <span class="scrap-session" data-l10n="WORKSHOP TERMINAL">WORKSHOP TERMINAL</span>
       </div>
       <div class="scrap-object">
         <div class="scrap-title" id="scrap-title"></div>
-        <div class="scrap-count" id="scrap-count">0 RECOVERABLE MATERIALS</div>
+        <div class="scrap-count" id="scrap-count" data-l10n="0 RECOVERABLE MATERIALS">0 RECOVERABLE MATERIALS</div>
       </div>
       <div class="scrap-yields" id="scrap-yields"></div>
       <div class="scrap-actions">
         <button class="scrap-action scrap-action-cancel" type="button" onclick="actScrapCancel()">
-          <span class="scrap-key">ESC / TAB</span><span>CANCEL</span>
+          <span class="scrap-key">ESC / TAB</span><span data-l10n="CANCEL">CANCEL</span>
         </button>
         <button class="scrap-action scrap-action-confirm" type="button" onclick="actScrapConfirm()">
-          <span class="scrap-key">R</span><span>SCRAP</span>
+          <span class="scrap-key">R</span><span data-l10n="SCRAP">SCRAP</span>
         </button>
       </div>
     </div>
   </div>
 </div>
 
-
+<script src="js/localization.js"></script>
+<script src="prisma_controller_glyphs.js"></script>
+<script src="js/workshop_preview.js"></script>
+<script src="js/workshop_catalog.js"></script>
 <script src="js/workshop.js"></script>
+<script src="js/workshop_scrap.js"></script>
+<script src="js/workshop_controller.js"></script>
 </body>
 </html>

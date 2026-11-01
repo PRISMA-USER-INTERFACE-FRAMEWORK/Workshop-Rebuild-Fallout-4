@@ -1,0 +1,424 @@
+[
+  {
+    "categories": [
+      "WEAPONS",
+      "MELEE"
+    ],
+    "desc": "Gunsmith table for crafting and repairing weapons.",
+    "id": "weapon",
+    "levels": [
+      {
+        "bonus": "Unlocks tier 1 weapons",
+        "caps": 500,
+        "cost": [
+          {
+            "count": 25,
+            "name": "Steel",
+            "ref": "Fallout4.esm|01FABD"
+          },
+          {
+            "count": 10,
+            "name": "Screws",
+            "ref": "Fallout4.esm|03D294"
+          },
+          {
+            "count": 4,
+            "name": "Oil",
+            "ref": "Fallout4.esm|01FAB4"
+          }
+        ],
+        "level": 1,
+        "timeSec": 3600
+      },
+      {
+        "bonus": "Unlocks tier 2 (combat) weapons",
+        "caps": 1500,
+        "cost": [
+          {
+            "count": 40,
+            "name": "Steel",
+            "ref": "Fallout4.esm|01FABD"
+          },
+          {
+            "count": 20,
+            "name": "Aluminum",
+            "ref": "Fallout4.esm|01FA91"
+          },
+          {
+            "count": 12,
+            "name": "Gears",
+            "ref": "Fallout4.esm|01FAB0"
+          },
+          {
+            "count": 8,
+            "name": "Oil",
+            "ref": "Fallout4.esm|01FAB4"
+          }
+        ],
+        "level": 2,
+        "timeSec": 14400
+      },
+      {
+        "bonus": "Unlocks tier 3 (advanced) weapons",
+        "caps": 4000,
+        "cost": [
+          {
+            "count": 35,
+            "name": "Aluminum",
+            "ref": "Fallout4.esm|01FA91"
+          },
+          {
+            "count": 20,
+            "name": "Gears",
+            "ref": "Fallout4.esm|01FAB0"
+          },
+          {
+            "count": 15,
+            "name": "Circuitry",
+            "ref": "Fallout4.esm|01FA9B"
+          },
+          {
+            "count": 15,
+            "name": "Oil",
+            "ref": "Fallout4.esm|01FAB4"
+          }
+        ],
+        "level": 3,
+        "timeSec": 43200
+      }
+    ],
+    "name": "Weapon Bench",
+    "nif": "Furniture\\Workstations\\WorkbenchWeapons\\WorkbenchWeaponsA.nif"
+  },
+  {
+    "categories": [
+      "AMMO",
+      "GRENADES",
+      "MINES"
+    ],
+    "desc": "Reloading bench for ammunition and explosives.",
+    "id": "munitions",
+    "levels": [
+      {
+        "bonus": "Unlocks tier 1 ammo",
+        "caps": 500,
+        "cost": [
+          {
+            "count": 15,
+            "name": "Steel",
+            "ref": "Fallout4.esm|01FABD"
+          },
+          {
+            "count": 8,
+            "name": "Screws",
+            "ref": "Fallout4.esm|03D294"
+          }
+        ],
+        "level": 1,
+        "timeSec": 3600
+      },
+      {
+        "bonus": "Unlocks tier 2 ammo + explosives",
+        "caps": 1500,
+        "cost": [
+          {
+            "count": 30,
+            "name": "Steel",
+            "ref": "Fallout4.esm|01FABD"
+          },
+          {
+            "count": 15,
+            "name": "Aluminum",
+            "ref": "Fallout4.esm|01FA91"
+          },
+          {
+            "count": 8,
+            "name": "Circuitry",
+            "ref": "Fallout4.esm|01FA9B"
+          }
+        ],
+        "level": 2,
+        "timeSec": 14400
+      },
+      {
+        "bonus": "Unlocks tier 3 (energy/heavy) ammo",
+        "caps": 4000,
+        "cost": [
+          {
+            "count": 25,
+            "name": "Aluminum",
+            "ref": "Fallout4.esm|01FA91"
+          },
+          {
+            "count": 20,
+            "name": "Circuitry",
+            "ref": "Fallout4.esm|01FA9B"
+          },
+          {
+            "count": 12,
+            "name": "Gears",
+            "ref": "Fallout4.esm|01FAB0"
+          }
+        ],
+        "level": 3,
+        "timeSec": 43200
+      }
+    ],
+    "name": "Munitions Bench",
+    "nif": "Furniture\\Workstations\\WorkbenchWeapons\\WorkbenchWeaponsA.nif"
+  },
+  {
+    "categories": [
+      "ARMOR",
+      "HEADGEAR",
+      "BACKPACKS"
+    ],
+    "desc": "Workbench for fabricating armor, headgear and packs.",
+    "id": "armor",
+    "levels": [
+      {
+        "bonus": "Unlocks tier 1 armor",
+        "caps": 500,
+        "cost": [
+          {
+            "count": 20,
+            "name": "Cloth",
+            "ref": "Fallout4.esm|1223C7"
+          },
+          {
+            "count": 15,
+            "name": "Leather",
+            "ref": "Fallout4.esm|01FAAE"
+          },
+          {
+            "count": 6,
+            "name": "Adhesive",
+            "ref": "Fallout4.esm|01FAA5"
+          }
+        ],
+        "level": 1,
+        "timeSec": 3600
+      },
+      {
+        "bonus": "Unlocks tier 2 (combat) armor",
+        "caps": 1500,
+        "cost": [
+          {
+            "count": 25,
+            "name": "Leather",
+            "ref": "Fallout4.esm|01FAAE"
+          },
+          {
+            "count": 20,
+            "name": "Steel",
+            "ref": "Fallout4.esm|01FABD"
+          },
+          {
+            "count": 10,
+            "name": "Adhesive",
+            "ref": "Fallout4.esm|01FAA5"
+          },
+          {
+            "count": 10,
+            "name": "Aluminum",
+            "ref": "Fallout4.esm|01FA91"
+          }
+        ],
+        "level": 2,
+        "timeSec": 14400
+      },
+      {
+        "bonus": "Unlocks tier 3 (heavy/synth) armor",
+        "caps": 4000,
+        "cost": [
+          {
+            "count": 30,
+            "name": "Aluminum",
+            "ref": "Fallout4.esm|01FA91"
+          },
+          {
+            "count": 15,
+            "name": "Gears",
+            "ref": "Fallout4.esm|01FAB0"
+          },
+          {
+            "count": 12,
+            "name": "Circuitry",
+            "ref": "Fallout4.esm|01FA9B"
+          },
+          {
+            "count": 15,
+            "name": "Adhesive",
+            "ref": "Fallout4.esm|01FAA5"
+          }
+        ],
+        "level": 3,
+        "timeSec": 43200
+      }
+    ],
+    "name": "Armor Bench",
+    "nif": "Furniture\\Workstations\\WorkbenchArmor\\WorkstationArmorB01.nif"
+  },
+  {
+    "categories": [
+      "HEALING",
+      "DRUGS"
+    ],
+    "desc": "Lab for synthesizing medicine and chems.",
+    "id": "chem",
+    "levels": [
+      {
+        "bonus": "Unlocks tier 1 medicine",
+        "caps": 500,
+        "cost": [
+          {
+            "count": 10,
+            "name": "Steel",
+            "ref": "Fallout4.esm|01FABD"
+          },
+          {
+            "count": 5,
+            "name": "Oil",
+            "ref": "Fallout4.esm|01FAB4"
+          },
+          {
+            "count": 10,
+            "name": "Cloth",
+            "ref": "Fallout4.esm|1223C7"
+          }
+        ],
+        "level": 1,
+        "timeSec": 3600
+      },
+      {
+        "bonus": "Unlocks tier 2 chems",
+        "caps": 1500,
+        "cost": [
+          {
+            "count": 8,
+            "name": "Circuitry",
+            "ref": "Fallout4.esm|01FA9B"
+          },
+          {
+            "count": 10,
+            "name": "Oil",
+            "ref": "Fallout4.esm|01FAB4"
+          },
+          {
+            "count": 10,
+            "name": "Aluminum",
+            "ref": "Fallout4.esm|01FA91"
+          }
+        ],
+        "level": 2,
+        "timeSec": 14400
+      },
+      {
+        "bonus": "Unlocks tier 3 (advanced) chems",
+        "caps": 4000,
+        "cost": [
+          {
+            "count": 15,
+            "name": "Circuitry",
+            "ref": "Fallout4.esm|01FA9B"
+          },
+          {
+            "count": 10,
+            "name": "Gears",
+            "ref": "Fallout4.esm|01FAB0"
+          },
+          {
+            "count": 20,
+            "name": "Aluminum",
+            "ref": "Fallout4.esm|01FA91"
+          }
+        ],
+        "level": 3,
+        "timeSec": 43200
+      }
+    ],
+    "name": "Chem Station",
+    "nif": "Furniture\\Workstations\\WorkstationChemistryA01.nif"
+  },
+  {
+    "categories": [
+      "UTILITY",
+      "HOLOTAPES"
+    ],
+    "desc": "General fabrication for gear, holotapes and parts.",
+    "id": "utility",
+    "levels": [
+      {
+        "bonus": "Unlocks tier 1 gear",
+        "caps": 500,
+        "cost": [
+          {
+            "count": 15,
+            "name": "Steel",
+            "ref": "Fallout4.esm|01FABD"
+          },
+          {
+            "count": 8,
+            "name": "Screws",
+            "ref": "Fallout4.esm|03D294"
+          },
+          {
+            "count": 5,
+            "name": "Adhesive",
+            "ref": "Fallout4.esm|01FAA5"
+          }
+        ],
+        "level": 1,
+        "timeSec": 3600
+      },
+      {
+        "bonus": "Unlocks tier 2 gear + holotapes",
+        "caps": 1500,
+        "cost": [
+          {
+            "count": 25,
+            "name": "Steel",
+            "ref": "Fallout4.esm|01FABD"
+          },
+          {
+            "count": 10,
+            "name": "Circuitry",
+            "ref": "Fallout4.esm|01FA9B"
+          },
+          {
+            "count": 8,
+            "name": "Gears",
+            "ref": "Fallout4.esm|01FAB0"
+          }
+        ],
+        "level": 2,
+        "timeSec": 14400
+      },
+      {
+        "bonus": "Unlocks tier 3 gear",
+        "caps": 4000,
+        "cost": [
+          {
+            "count": 20,
+            "name": "Aluminum",
+            "ref": "Fallout4.esm|01FA91"
+          },
+          {
+            "count": 18,
+            "name": "Circuitry",
+            "ref": "Fallout4.esm|01FA9B"
+          },
+          {
+            "count": 15,
+            "name": "Gears",
+            "ref": "Fallout4.esm|01FAB0"
+          }
+        ],
+        "level": 3,
+        "timeSec": 43200
+      }
+    ],
+    "name": "Utility Bench",
+    "nif": "Furniture\\Workstations\\WorkstationChemistryA01.nif"
+  }
+]

@@ -5,7 +5,7 @@
 #include <vector>
 
 namespace F4SE { class SerializationInterface; }
-namespace RE { class TESForm; }
+namespace RE { class TESForm; class TESObjectREFR; }
 
 namespace WorkbenchUpgrades
 {
@@ -55,8 +55,6 @@ namespace WorkbenchUpgrades
     void Poll();
 
     int PlayerLevel(const std::string& benchId);
-
-    bool IsPowered(const std::string& benchId);
 
     bool IsRecipeCraftable(const std::string& category, int createdValue);
 

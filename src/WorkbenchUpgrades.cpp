@@ -1,4 +1,7 @@
 #include "WorkbenchUpgrades.h"
+#include "WorkbenchDefinitions.h"
+
+#include "DebugLog.h"
 
 #include "CobjCache.h"
 #include "CraftingConfig.h"
@@ -41,6 +44,8 @@ namespace WorkbenchUpgrades
         std::unordered_map<std::string, BenchState> s_state;
         std::unordered_map<std::string, int>        s_defaultLevel;
         std::unordered_map<std::string, Tiers>      s_tiers;
+        std::unordered_map<std::string, std::size_t> s_benchIndex;
+        std::unordered_map<std::string, std::string> s_categoryBench;
         bool                                        s_inited = false;
         bool                                        s_unlockAll = false;
         std::recursive_mutex                        s_stateLock;
@@ -61,15 +66,21 @@ namespace WorkbenchUpgrades
             s_tiers.clear();
             auto path = Paths::F4SEUserDir() / "PrismaCrafting.ini";
             CSimpleIniA ini; ini.SetUnicode();
-            ini.LoadFile(path.string().c_str());
+            const SI_Error rc = ini.LoadFile(path.c_str());
+            if (rc < 0) {
+                logger::warn("WorkbenchUpgrades: could not read PrismaCrafting.ini (rc={}): {} -- all defaults in effect",
+                             rc, rc == SI_FILE ? "file missing or unreadable" : "parse error");
+            }
 
             s_unlockAll = ini.GetBoolValue("Workbench", "UnlockAllBenches", false);
+            DLOG(Bench, "ini: [Workbench]UnlockAllBenches={} (from PrismaCrafting.ini)", s_unlockAll);
             for (const char* id : { "weapon", "munitions", "armor", "chem", "utility" }) {
 
                 long v = ini.GetLongValue("Workbench", id, 0);
                 if (v < 0) v = 0; if (v > 3) v = 3;
                 s_defaultLevel[id] = static_cast<int>(v);
 
+                DLOG(Bench, "ini: [Workbench]{}={} (starting tier)", id, v);
                 Tiers t = DefaultTiers(id);
                 const char* csv = ini.GetValue("WorkbenchTiers", id, nullptr);
                 if (csv && csv[0]) {
@@ -102,11 +113,17 @@ namespace WorkbenchUpgrades
             return it == s_defaultLevel.end() ? 0 : it->second;
         }
 
+        const BenchDef* FindBench(const std::string& id)
+        {
+            const auto it = s_benchIndex.find(id);
+            if (it == s_benchIndex.end() || it->second >= s_benches.size()) return nullptr;
+            return &s_benches[it->second];
+        }
+
         int MaxLevel(const std::string& id)
         {
-            const auto it = std::find_if(s_benches.begin(), s_benches.end(),
-                [&](const BenchDef& def) { return def.id == id; });
-            return it == s_benches.end() ? -1 : static_cast<int>(it->levels.size());
+            const auto* def = FindBench(id);
+            return def ? static_cast<int>(def->levels.size()) : -1;
         }
 
         std::uint32_t BenchCode(const std::string& id)
@@ -171,12 +188,19 @@ namespace WorkbenchUpgrades
         void BuildDefaults()
         {
             s_benches.clear();
+            s_benchIndex.clear();
+            s_categoryBench.clear();
             auto add = [](const char* id, const char* name, const char* desc, const char* nif,
                           std::vector<std::string> cats, std::vector<LevelDef> levels) {
                 BenchDef b;
                 b.id = id; b.name = name; b.desc = desc; b.nif = nif;
                 b.categories = std::move(cats); b.levels = std::move(levels);
+                const auto index = s_benches.size();
                 s_benches.push_back(std::move(b));
+                const auto& stored = s_benches[index];
+                s_benchIndex.emplace(stored.id, index);
+                for (const auto& category : stored.categories)
+                    s_categoryBench.emplace(category, stored.id);
             };
 
             add("weapon", "Weapon Bench", "Gunsmith table for crafting and repairing weapons.", kNifWeapon,
@@ -239,10 +263,9 @@ namespace WorkbenchUpgrades
 
         std::uint64_t UpgradeDurationSec(const std::string& a_id, int a_level)
         {
-            for (const auto& b : s_benches)
-                if (b.id == a_id && a_level >= 0 && a_level < static_cast<int>(b.levels.size()))
-                    return static_cast<std::uint64_t>(b.levels[a_level].timeSec);
-            return 0;
+            const auto* def = FindBench(a_id);
+            if (!def || a_level < 0 || a_level >= static_cast<int>(def->levels.size())) return 0;
+            return static_cast<std::uint64_t>(def->levels[a_level].timeSec);
         }
 
         void PollComplete()
@@ -286,6 +309,7 @@ namespace WorkbenchUpgrades
         ReadIniDefaults();
         BuildDefaults();
         ResolveCosts();
+        LoadBenchDefinitions(Paths::F4SEUserDir() / "PrismaCraftingWorkbenches.json", s_benches, s_categoryBench);
         logger::info("WorkbenchUpgrades: initialized {} benches (start levels w={} m={} a={} c={} u={})",
             s_benches.size(), DefaultLevel("weapon"), DefaultLevel("munitions"),
             DefaultLevel("armor"), DefaultLevel("chem"), DefaultLevel("utility"));
@@ -293,19 +317,15 @@ namespace WorkbenchUpgrades
 
     std::string BenchForCategory(const std::string& category)
     {
-        for (const auto& b : s_benches)
-            for (const auto& c : b.categories)
-                if (c == category) return b.id;
-        return "";
+        const auto it = s_categoryBench.find(category);
+        return it == s_categoryBench.end() ? std::string{} : it->second;
     }
 
     std::string BenchNameForCategory(const std::string& category)
     {
         const std::string id = BenchForCategory(category);
-        if (id.empty()) return "";
-        for (const auto& b : s_benches)
-            if (b.id == id) return b.name;
-        return "";
+        const auto* def = id.empty() ? nullptr : FindBench(id);
+        return def ? def->name : std::string{};
     }
 
     int RequiredLevel(const std::string& category, int score)
@@ -329,7 +349,10 @@ namespace WorkbenchUpgrades
         return t[2];
     }
 
-    void Poll() { PollComplete(); }
+    void Poll()
+    {
+        PollComplete();
+    }
 
     int PlayerLevel(const std::string& benchId)
     {
@@ -338,17 +361,10 @@ namespace WorkbenchUpgrades
         return it == s_state.end() ? 0 : it->second.level;
     }
 
-    bool IsPowered(const std::string& )
-    {
-
-        return true;
-    }
-
     bool IsRecipeCraftable(const std::string& category, int createdValue)
     {
         const std::string bench = BenchForCategory(category);
         if (bench.empty()) return true;
-        if (!IsPowered(bench)) return false;
         if (s_unlockAll) return true;
         return PlayerLevel(bench) >= RequiredLevel(category, createdValue);
     }
@@ -359,16 +375,14 @@ namespace WorkbenchUpgrades
     {
         const std::string bench = BenchForCategory(category);
         if (bench.empty()) return "";
-        if (!IsPowered(bench)) return "NO POWER";
         const int need = RequiredLevel(category, createdValue);
         if (PlayerLevel(bench) >= need) return "";
 
-        for (const auto& b : s_benches)
-            if (b.id == bench) {
-                std::string nm = b.name;
-                for (auto& ch : nm) ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
-                return nm + " Lv" + std::to_string(need);
-            }
+        if (const auto* def = FindBench(bench)) {
+            std::string nm = def->name;
+            for (auto& ch : nm) ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+            return nm + " Lv" + std::to_string(need);
+        }
         return "BENCH Lv" + std::to_string(need);
     }
 
@@ -403,8 +417,7 @@ namespace WorkbenchUpgrades
 
         PollComplete();
 
-        const BenchDef* def = nullptr;
-        for (const auto& b : s_benches) if (b.id == benchId) { def = &b; break; }
+        const BenchDef* def = FindBench(benchId);
         if (!def)                            { setReason("NO_BENCH");  return false; }
 
         auto itSt = s_state.find(benchId);
@@ -414,7 +427,6 @@ namespace WorkbenchUpgrades
         if (st.level < 0) { st.level = 0; st.upgradeCompleteAt = 0; }
         if (st.level >= static_cast<int>(def->levels.size())) { setReason("MAXED"); return false; }
         if (st.upgradeCompleteAt != 0)       { setReason("BUSY");      return false; }
-        if (!IsPowered(benchId))             { setReason("NO_POWER");  return false; }
 
         const LevelDef& L = def->levels[st.level];
         auto* player = RE::PlayerCharacter::GetSingleton();
@@ -432,7 +444,7 @@ namespace WorkbenchUpgrades
         std::vector<std::pair<RE::TESForm*, std::uint32_t>> costs;
         costs.reserve(L.cost.size());
         for (const auto& c : L.cost)
-            if (c.form && c.count) costs.emplace_back(c.form, c.count);
+            if (c.count) costs.emplace_back(c.form, c.count);
 
         if (!CobjCache::ConsumeComponents(costs, player, sources, true) ||
             !CobjCache::ConsumeComponents(costs, player, sources)) {
@@ -480,22 +492,14 @@ namespace WorkbenchUpgrades
         }
     }
 
-    void ApplyStateOnMainThread(std::vector<std::pair<std::string, BenchState>> staged,
-                                const char* site)
+    void ApplyState(const std::vector<std::pair<std::string, BenchState>>& staged,
+                    const char* site)
     {
-        auto apply = [staged = std::move(staged), site]() {
-            std::lock_guard<std::recursive_mutex> lock(s_stateLock);
-            for (const auto& [id, state] : staged) s_state[id] = state;
-            PollComplete();
-            logger::info("WorkbenchUpgrades: [COSAVE] applied {} bench state(s) on the main thread ({})",
-                         staged.size(), site);
-        };
-        if (const auto* task = F4SE::GetTaskInterface()) {
-            task->AddTask(std::move(apply));
-        } else {
-            logger::warn("WorkbenchUpgrades: [COSAVE] no task interface -- applying '{}' inline", site);
-            apply();
-        }
+        std::lock_guard<std::recursive_mutex> lock(s_stateLock);
+        for (const auto& [id, state] : staged) s_state[id] = state;
+        PollComplete();
+        logger::info("WorkbenchUpgrades: [COSAVE] applied {} bench state(s) ({})",
+                     staged.size(), site);
     }
 
     bool CoSaveLoadRecord(std::uint32_t type, std::uint32_t version, std::uint32_t length,
@@ -517,7 +521,7 @@ namespace WorkbenchUpgrades
             logger::warn("WorkbenchUpgrades: failed to read co-save entry count");
             return true;
         }
-        if (count > 64) {
+        if (count > 5) {
             logger::warn("WorkbenchUpgrades: co-save record count {} looks corrupt, skipping", count);
             return true;
         }
@@ -556,21 +560,18 @@ namespace WorkbenchUpgrades
             staged.emplace_back(id, BenchState{ level, at });
         }
 
-        logger::info("WorkbenchUpgrades: [COSAVE] staged {} bench state(s) for the main thread", staged.size());
-        ApplyStateOnMainThread(std::move(staged), "load");
+        ApplyState(staged, "load");
         return true;
     }
 
     void CoSaveRevert()
     {
+        std::lock_guard<std::recursive_mutex> lock(s_stateLock);
         std::vector<std::pair<std::string, BenchState>> staged;
-        {
-            std::lock_guard<std::recursive_mutex> lock(s_stateLock);
-            staged.reserve(s_benches.size());
-            for (const auto& bench : s_benches)
-                staged.emplace_back(bench.id, BenchState{ DefaultLevel(bench.id), 0 });
-        }
-        ApplyStateOnMainThread(std::move(staged), "revert");
+        staged.reserve(s_benches.size());
+        for (const auto& bench : s_benches)
+            staged.emplace_back(bench.id, BenchState{ DefaultLevel(bench.id), 0 });
+        ApplyState(staged, "revert");
     }
 
 }

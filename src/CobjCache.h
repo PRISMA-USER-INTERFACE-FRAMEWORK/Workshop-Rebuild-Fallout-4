@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -12,9 +13,10 @@ namespace RE { class BGSKeyword; class TESObjectREFR; class TESForm; class Playe
 
 namespace CobjCache
 {
+    inline constexpr uint32_t kWorkbenchCookingKeyword = 0x00102152;
     struct Component
     {
-        uint32_t      formId = 0;
+        uint32_t      formRef = 0;
         std::string   name;
         uint32_t      count = 0;
         RE::TESForm*  form  = nullptr;
@@ -22,13 +24,15 @@ namespace CobjCache
 
     struct PerkReq
     {
-        uint32_t    formId = 0;
+        uint32_t    formRef = 0;
         std::string name;
+        std::string op{};
+        float       value = 1.0f;
     };
 
     struct ToolOption
     {
-        uint32_t    formId = 0;
+        uint32_t    formRef = 0;
         std::string name;
     };
     struct ToolGroup
@@ -36,9 +40,15 @@ namespace CobjCache
         std::vector<ToolOption> options;
     };
 
+    struct ResourceValue
+    {
+        std::string label;      // display name, e.g. "Power"
+        float       value = 0;  // signed: generators give, lights and turrets take
+    };
+
     struct Recipe
     {
-        uint32_t                 formId = 0;
+        uint32_t                 formRef = 0;
         std::string              editorId;
         std::string              recipeKey;
         uint32_t                 createdFormId = 0;
@@ -71,10 +81,14 @@ namespace CobjCache
         std::string              menuPath;
         std::string              subCategory;
 
+        std::vector<ResourceValue> resources;
+
         std::vector<std::string> tools;
         std::vector<ToolGroup>   toolGroups;
         uint16_t                 workshopPriority = 0;
         bool                     isWorkshop = false;
+        bool                     workshopList = false;
+        std::vector<RE::TESForm*> workshopVariants;
         bool                     isMod = false;
 
         bool                     descLoaded = false;
@@ -99,14 +113,17 @@ namespace CobjCache
                            bool dryRun = false,
                            bool includePlayer = true);
 
-    const Recipe* FindWorkshopRecipeByFormId(std::uint32_t cobjFormId);
+    std::optional<Recipe> FindWorkshopRecipeByFormId(std::uint32_t cobjFormId);
+    bool WorkshopSelectionMatches(const Recipe& recipe, std::uint32_t selectedFormId);
 
-    const Recipe* FindWorkshopRecipeByCreated(std::uint32_t createdFormId);
+    std::optional<Recipe> FindWorkshopRecipeByCreated(std::uint32_t createdFormId);
 
     bool WorkshopRecipeAvailable(const Recipe& r,
                                  const std::vector<RE::TESObjectREFR*>& sources = {});
 
     bool WorkshopCanAfford(const Recipe& r, const std::vector<RE::TESObjectREFR*>& sources = {});
+
+    std::vector<std::pair<RE::TESForm*, std::uint32_t>> CostsOf(const Recipe& r);
 
     bool WorkshopConsume(const Recipe& r, const std::vector<RE::TESObjectREFR*>& sources = {});
 
@@ -114,29 +131,41 @@ namespace CobjCache
 
     std::string GetRecipeDesc(uint32_t cobjFormId);
 
-    const std::string& CachePath();
-
     void ExportCurrentView(const std::vector<uint32_t>& benchIds);
 
     bool IsBenchKeyword(uint32_t keywordFormId);
 
-    int CraftRecipe(uint32_t cobjFormId, bool bypassGates = false,
-                    const std::vector<RE::TESObjectREFR*>& sources = {}, int times = 1);
+    int CraftRecipe(uint32_t cobjFormId, bool bypassGates,
+                    const std::vector<RE::TESObjectREFR*>& sources, int times,
+                    const std::vector<uint32_t>& wantIds, bool cookingBench);
 
-    std::string WorkshopBuildablesJson(const std::vector<RE::TESObjectREFR*>& sources = {});
+    struct WorkshopPageRequest
+    {
+        std::string search;
+        std::string category = "All";
+        std::string sub = "All";
+        std::string filter = "ALL";
+        int page = 0;
+        int pageSize = 64;
+        std::vector<std::string> favorites;
+        bool favoritesOnly = false;
+    };
+
+    std::string QueryWorkshopPage(const WorkshopPageRequest& request,
+                                  const std::vector<RE::TESObjectREFR*>& sources = {});
 
     void ApplyWorkshopCategories(const std::unordered_map<std::uint32_t, std::string>& categories);
 
     uint32_t FirstWorkshopBuildableCreatedId();
 
-    std::string QueryRecipesPage(const std::vector<uint32_t>& wantIds, const std::string& menuKind,
-                                 const std::string& search, const std::string& category,
-                                 const std::string& sub,
-                                 int lockFilter, int sort, int page, int pageSize,
-                                 const std::vector<RE::TESObjectREFR*>& sources = {},
+    struct LockFlags { bool wb = false; bool sch = false; bool any() const { return wb || sch; } };
+    struct RecipeEval { std::optional<LockFlags> locks; std::optional<bool> affordable; };
+    struct RecipePageQuery
+    {
+        std::vector<RecipeEval> eval;
+        std::unordered_map<std::string, size_t> seen;
+        std::vector<size_t> cands;
+        size_t cursor = 0;
+    };
 
-                                 bool cookingBench = false);
-
-    std::string FilterJsonForBench(const std::vector<uint32_t>& wantIds,
-                                   const std::vector<RE::TESObjectREFR*>& sources = {});
 }
