@@ -1,0 +1,55 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
+jobs:
+  release:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    env:
+      COMMONLIBF4_PATH: ${{ github.workspace }}/commonlibf4-nomad
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+
+      - name: checkout CommonLibF4
+        uses: actions/checkout@v4
+        with:
+          repository: G-A-R-D-E-N/commonlibf4-nomad
+          ref: main
+          path: commonlibf4-nomad
+          submodules: recursive
+
+      - name: setup xmake
+        uses: xmake-io/github-action-setup-xmake@v1
+        with:
+          xmake-version: "latest"
+
+      - name: config
+        run: xmake config -y --mode=release --toolchain=msvc
+
+      - name: build
+        run: xmake build -y -vD PrismaCrafting
+
+      - name: package
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            python tools/package_release.py build/windows/x64/release/PrismaCrafting.dll dist "${GITHUB_REF_NAME#v}"
+          else
+            python tools/package_release.py build/windows/x64/release/PrismaCrafting.dll dist
+          fi
+
+      - name: attach to release
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" || gh release create "$GITHUB_REF_NAME" --draft --verify-tag --title "$GITHUB_REF_NAME" --notes "" --repo "$GITHUB_REPOSITORY"
+          gh release upload "$GITHUB_REF_NAME" "dist/PrismaCrafting-${GITHUB_REF_NAME#v}.zip" --clobber --repo "$GITHUB_REPOSITORY"

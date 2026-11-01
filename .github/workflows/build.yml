@@ -37,9 +37,19 @@ jobs:
       - name: build
         run: xmake build -y -vD PrismaCrafting
 
+      - name: package
+        run: python tools/package_release.py build/windows/x64/release/PrismaCrafting.dll dist
+
       - name: upload plugin
         uses: actions/upload-artifact@v4
         with:
           name: PrismaCrafting.dll
           path: build/windows/x64/release/PrismaCrafting.dll
+          if-no-files-found: error
+
+      - name: upload package
+        uses: actions/upload-artifact@v4
+        with:
+          name: PrismaCrafting-package
+          path: dist/PrismaCrafting-*.zip
           if-no-files-found: error
