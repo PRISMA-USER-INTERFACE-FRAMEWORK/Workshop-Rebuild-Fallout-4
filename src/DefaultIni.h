@@ -67,6 +67,10 @@ namespace crafting::ini
 ;  PrismaUI view lifecycle and the JS bridge
 ;View=1
 
+;  Weapon bench dev mode: list every attachment for every slot as a virtual
+;  owned part (runtime-only; no items are added to the save).
+;WeaponBenchDev=1
+
 ; ----------------------------------------------------------------------------
 ;  [UI]
 ; ----------------------------------------------------------------------------
@@ -189,6 +193,16 @@ namespace crafting::ini
 ;  and intercepting them can conflict with the mod that owns them. Turn it on
 ;  if you would rather use PrismaCrafting's menu there.
 ;InterceptFurnitureSwapperBenches=0
+
+; ----------------------------------------------------------------------------
+;  [Experimental] -- unfinished features, off by default
+; ----------------------------------------------------------------------------
+[Experimental]
+
+;  Open PrismaCrafting's weapon workbench screen on weapon benches instead of
+;  the vanilla one. Work in progress: the screen lists weapons and parts but
+;  installing and removing parts is not available yet, so leave it off for normal play.
+;NativeWeaponBench=0
 
 ; ----------------------------------------------------------------------------
 ;  [Author] -- mod authoring
