@@ -1,5 +1,12 @@
 # Workshop Rebuild: What's New
 
+## Workshop Rebuilt 1.3.0
+
+Next-Gen 1.10.984 is now supported, including the settlement build helper (found by static analysis,
+not yet tried in game). The rest is stability: more accurate recipe cards, steadier crafting and
+settlement menus, safer settings and recipe exports, and cheat mode off unless the ini enables it.
+The full list is in `changelognexus.bbcode`.
+
 ## Workshop Rebuilt 1.2.0
 
 The interface now runs on the current PrismaUI framework, and the whole mod can be played with a
