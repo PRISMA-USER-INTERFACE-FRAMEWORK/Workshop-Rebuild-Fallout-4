@@ -206,7 +206,6 @@ static void InitializePostLoadOnGameThread()
 
     g_allowCheatMode.store(LoadAllowCheatMode(), std::memory_order_release);
     g_modelPreviews.store(LoadModelPreviews(), std::memory_order_release);
-    WeaponBench::Initialize(LoadNativeWeaponBench());
 
     static bool menuSinksRegistered = false;
     if (!menuSinksRegistered) {
@@ -259,7 +258,6 @@ static void InitializeRuntimeOnGameThread()
         if (!s_inputHooksPrepared.exchange(true, std::memory_order_acq_rel)) {
             g_api->SuppressVanillaMenuIf("ExamineConfirmMenu", []() -> bool {
                 return (g_open.load() && IsCraftMenu(MenuName()))
-                    || WeaponBench::SessionActive()
                     || g_scrapOverlayOpen.load()
                     || g_scrapAfterPlacementCancelTicks.load() > 0
                     || g_scrapSuppressLatch.load() > 0;

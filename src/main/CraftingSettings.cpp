@@ -134,24 +134,6 @@ bool LoadAllowCheatMode()
     return ini.GetBoolValue("Gameplay", "AllowCheatMode", false);
 }
 
-bool LoadNativeWeaponBench()
-{
-    std::lock_guard<std::mutex> lock(g_settingsLock);
-    CSimpleIniA ini;
-    ini.SetUnicode();
-    ini.LoadFile(SettingsIniPath().c_str());
-    return ini.GetBoolValue("Experimental", "NativeWeaponBench", false);
-}
-
-bool LoadWeaponBenchDev()
-{
-    std::lock_guard<std::mutex> lock(g_settingsLock);
-    CSimpleIniA ini;
-    ini.SetUnicode();
-    ini.LoadFile(SettingsIniPath().c_str());
-    return ini.GetBoolValue("Debug", "WeaponBenchDev", false);
-}
-
 std::string LoadTheme()
 {
     std::lock_guard<std::mutex> lock(g_settingsLock);

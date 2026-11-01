@@ -50,7 +50,6 @@ namespace WorkshopControllerInput
 
         Slot s_workshop;
         Slot s_crafting;
-        Slot s_weaponBench;
 
         bool Ready(const Slot& slot)
         {
@@ -241,7 +240,6 @@ namespace WorkshopControllerInput
         {
             PushPrompts(s_workshop);
             PushPrompts(s_crafting);
-            PushPrompts(s_weaponBench);
         }
 
         void ReleaseFocus(const char*, void*)
@@ -292,19 +290,6 @@ namespace WorkshopControllerInput
         return EnsureApi(s_crafting);
     }
 
-    bool InstallWeaponBench(std::atomic<PrismaView>* view)
-    {
-        s_weaponBench.view = view;
-        s_weaponBench.active = nullptr;
-        s_weaponBench.bindings = Table::kWeaponBenchBindings;
-        s_weaponBench.bindingCount = std::size(Table::kWeaponBenchBindings);
-        s_weaponBench.prompts = Table::kWeaponBenchPrompts;
-        s_weaponBench.promptCount = std::size(Table::kWeaponBenchPrompts);
-        s_weaponBench.promptFunction = "setWeaponBenchPrompts";
-        s_weaponBench.owner = "WorkshopControllerInput(weapon bench)";
-        return EnsureApi(s_weaponBench);
-    }
-
     void Activate()
     {
         if (!Ready(s_workshop)) return;
@@ -322,14 +307,6 @@ namespace WorkshopControllerInput
         BindUIEvents(s_crafting);
         if (!BindActions(s_crafting)) return;
         PushPrompts(s_crafting);
-    }
-
-    void ActivateWeaponBench()
-    {
-        if (!Ready(s_weaponBench)) return;
-        BindUIEvents(s_weaponBench);
-        if (!BindActions(s_weaponBench)) return;
-        PushPrompts(s_weaponBench);
     }
 
     void PushCraftingPrompts(PrismaView view)
@@ -355,7 +332,7 @@ namespace WorkshopControllerInput
 
         if (!s_api) return;
         Slot* slot = nullptr;
-        for (Slot* candidate : { &s_workshop, &s_crafting, &s_weaponBench }) {
+        for (Slot* candidate : { &s_workshop, &s_crafting }) {
             if (candidate->view && candidate->view->load(std::memory_order_acquire) == view) {
                 slot = candidate;
                 break;

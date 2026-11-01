@@ -3,43 +3,27 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title data-l10n-title="Prisma Armory">Prisma Armory</title>
-<link rel="stylesheet" href="prisma_controller_glyphs.css"><link rel="stylesheet" href="css/weapon_bench.css">
+<title>Prisma Armory</title>
+<link rel="stylesheet" href="css/weapon_bench.css">
 </head>
 <body>
-<header><button id="close" data-l10n-aria-label="Exit workbench" aria-label="Exit workbench">← <kbd data-l10n="ESC">ESC</kbd></button><span class="brand" data-l10n="PRISMA / ARMORY">PRISMA / ARMORY</span><span class="header-divider"></span><span class="eyebrow" data-l10n="CUSTOMIZE WEAPON">CUSTOMIZE WEAPON</span><span class="station"><span data-l10n="FIELD WORKBENCH">FIELD WORKBENCH</span> <span class="status-dot"></span></span></header>
+<header><button id="close" aria-label="Exit workbench">‹ <kbd>ESC</kbd></button><span class="brand">PRISMA / ARMORY</span><span class="header-divider"></span><span class="eyebrow">CUSTOMIZE WEAPON</span><span class="station">FIELD WORKBENCH <span class="status-dot"></span></span></header>
 <main>
-  <aside class="inventory" aria-label="Weapon inventory">
-    <div class="section-heading"><h2><span data-l10n="LOADOUT">LOADOUT</span> <span id="weapon-count">00</span></h2><span class="section-number" data-l10n="00 / SELECT">00 / SELECT</span></div>
-    <label class="sr-only" for="search"><span data-l10n="Search inventory">Search inventory</span></label>
-    <input id="search" type="search" placeholder="FIND WEAPON…" data-l10n-placeholder="FIND WEAPON…" autocomplete="off">
-    <div id="weapons" class="weapon-list"></div>
-  </aside>
-  <section class="stage" aria-label="Weapon and attachment slots">
-    <div class="stage-title">
-      <p class="eyebrow" data-l10n="WEAPON CONFIGURATION">WEAPON CONFIGURATION</p>
-      <h1 id="weapon-name" data-l10n="WEAPON WORKBENCH">WEAPON WORKBENCH</h1>
-      <p id="weapon-subtitle" data-l10n="Select a weapon to begin.">Select a weapon to begin.</p>
-    </div>
-    <div class="stage-canvas">
-      <div id="weapon-preview" class="preview weapon-preview"><span class="preview-label" data-l10n="ASSEMBLY / LIVE VIEW">ASSEMBLY / LIVE VIEW</span><p id="preview-empty" data-l10n="Weapon preview unavailable">Weapon preview unavailable</p><span id="fitted-count"></span></div>
-      <div id="slots" class="slots hotspots"></div>
-    </div>
-  </section>
-  <aside class="inspector">
-    <div class="section-heading"><h2 data-l10n="PERFORMANCE">PERFORMANCE</h2><span class="section-number" data-l10n="01 / READOUT">01 / READOUT</span></div>
+  <aside class="parts">
+    <div class="eyebrow">WEAPON CONFIGURATION</div><h1 id="weapon-name">WEAPON WORKBENCH</h1><p id="weapon-subtitle">Select a weapon to begin.</p>
     <div id="stats" class="stats"></div>
-    <div class="section-heading"><h2 id="slot-name" data-l10n="SELECT A SLOT">SELECT A SLOT</h2><span class="section-number" data-l10n="02 / INSPECT">02 / INSPECT</span></div>
-    <p id="slot-help" data-l10n="Choose a slot to see available parts.">Choose a slot to see available parts.</p>
-    <div id="installed" class="installed"></div>
-    <div class="part-detail"><div id="part-preview" class="preview part-preview"><p id="part-preview-empty" data-l10n="Attachment preview unavailable">Attachment preview unavailable</p></div><h3 id="part-name" data-l10n="NO PART SELECTED">NO PART SELECTED</h3><p id="part-description"></p><p id="exchange"></p><button id="install" class="primary" data-l10n="INSTALL ATTACHMENT" disabled>INSTALL ATTACHMENT</button><button id="remove" data-l10n="REMOVE TO INVENTORY" disabled>REMOVE TO INVENTORY</button></div>
+    <div class="section-heading"><h2 id="slot-name">SELECT A SLOT</h2><span class="section-number">01 / INSPECT</span></div>
+    <p id="slot-help">Choose a slot to see available parts.</p><div id="installed" class="installed"></div>
+    <div class="part-detail"><div id="part-preview" class="preview part-preview"><p id="part-preview-empty">Attachment preview unavailable</p></div><h3 id="part-name">NO PART SELECTED</h3><p id="part-description"></p><p id="exchange"></p><button id="install" class="primary" disabled>INSTALL ATTACHMENT</button><button id="remove" disabled>REMOVE TO INVENTORY</button></div>
   </aside>
-  <section class="attachment-tray" aria-label="Available attachments"><div class="section-heading"><h2 data-l10n="AVAILABLE ATTACHMENTS">AVAILABLE ATTACHMENTS</h2><span class="section-number" data-l10n="03 / MODIFY">03 / MODIFY</span><label class="toggle"><input id="owned-only" type="checkbox" checked> <span data-l10n="OWNED ONLY">OWNED ONLY</span></label></div><div id="choices" class="choices"></div></section>
+  <section class="assembly" aria-label="Weapon and attachment slots">
+    <div id="weapon-preview" class="preview"><span class="preview-label">ASSEMBLY / LIVE VIEW</span><p id="preview-empty">Weapon preview unavailable</p><span id="fitted-count"></span></div><div id="slots" class="slots"></div>
+  </section>
+  <section class="attachment-tray" aria-label="Available attachments"><div class="section-heading"><h2>AVAILABLE ATTACHMENTS</h2><label class="toggle"><input id="owned-only" type="checkbox" checked> OWNED ONLY</label></div><div id="choices" class="choices"></div></section>
+  <section class="inventory" aria-label="Weapon inventory"><div class="inventory-heading"><h2>LOADOUT <span id="weapon-count">00</span></h2><label class="sr-only" for="search">Search inventory</label><input id="search" type="search" placeholder="Find weapon…" autocomplete="off"></div><div id="weapons" class="weapon-list"></div></section>
 </main>
-<footer><span><span class="status-dot"></span> <span id="status" role="status" aria-live="polite" data-l10n="Workbench unavailable. Your inventory has not changed.">Workbench unavailable. Your inventory has not changed.</span></span><div id="controls" class="controls" aria-hidden="true"></div><span class="keyboard-hints"><kbd>←</kbd><kbd>→</kbd> <span data-l10n="SLOT">SLOT</span> <kbd data-l10n="ENTER">ENTER</kbd> <span data-l10n="SELECT">SELECT</span> <kbd data-l10n="ESC">ESC</kbd> <span data-l10n="BACK">BACK</span></span></footer>
-<div id="confirm" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-text"><div class="dialog"><div class="eyebrow" data-l10n="CONFIRM MODIFICATION">CONFIRM MODIFICATION</div><h2 id="confirm-title" data-l10n="INSTALL ATTACHMENT">INSTALL ATTACHMENT</h2><p id="confirm-text"></p><div class="dialog-actions"><button id="cancel" data-l10n="CANCEL">CANCEL</button><button id="apply" class="primary" data-l10n="CONFIRM">CONFIRM</button></div></div></div>
-<script src="js/localization.js"></script>
-<script src="prisma_controller_glyphs.js"></script>
+<footer><span><span class="status-dot"></span> <span id="status" role="status" aria-live="polite">Workbench unavailable. Your inventory has not changed.</span></span><span><kbd>←</kbd><kbd>→</kbd> SLOT <kbd>ENTER</kbd> SELECT <kbd>ESC</kbd> BACK</span></footer>
+<div id="confirm" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-text"><div class="dialog"><div class="eyebrow">CONFIRM MODIFICATION</div><h2 id="confirm-title">INSTALL ATTACHMENT</h2><p id="confirm-text"></p><div class="dialog-actions"><button id="cancel">CANCEL</button><button id="apply" class="primary">CONFIRM</button></div></div></div>
 <script src="js/weapon_bench.js"></script>
 </body>
 </html>

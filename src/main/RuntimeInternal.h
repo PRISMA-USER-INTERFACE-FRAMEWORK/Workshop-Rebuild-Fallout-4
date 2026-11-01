@@ -15,7 +15,6 @@
 #include "PlacementQueue.h"
 #include "WorkshopJsonChunks.h"
 #include "WorkshopCatalogDeadline.h"
-#include "WeaponBench.h"
 #include "VanillaMenuSuppression.h"
 
 #include <functional>
@@ -80,8 +79,6 @@ bool LoadAllowCheatMode();
 bool LoadModelPreviews();
 void SaveUnlockAllBenches(bool enabled);
 void SaveModelPreviews(bool enabled);
-bool LoadNativeWeaponBench();
-bool LoadWeaponBenchDev();
 std::string LoadTheme();
 void SaveTheme(const char* name);
 int ParseIntOr(std::string_view s, int fallback);

@@ -324,11 +324,6 @@ public:
             return RE::BSEventNotifyControl::kContinue;
         }
 
-        if (WeaponBench::Enabled() && a_event.menuName == "ExamineMenu") {
-            WeaponBench::OnExamineMenuEvent(a_event);
-            return RE::BSEventNotifyControl::kContinue;
-        }
-
         if (!IsCraftMenu(a_event.menuName))
             return RE::BSEventNotifyControl::kContinue;
 
