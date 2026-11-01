@@ -322,7 +322,8 @@ static unsigned long ReadRawNodeFieldsGuarded(std::uintptr_t a_node, RawNodeFiel
         a_out.childCount = node->children.size();
         if (auto* keyword = node->filterKeyword) {
             a_out.keywordFormId = keyword->GetFormID();
-            if (const char* name = keyword->GetFullName(); name) {
+            const char* name = keyword->GetFormEditorID();
+            if (name && name[0]) {
                 std::strncpy(a_out.keywordName, name, sizeof(a_out.keywordName) - 1);
             }
         }
