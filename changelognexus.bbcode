@@ -2,7 +2,7 @@
 
 [spoiler]
 
-Workshop Rebuilt 1.2.0 is a month of work: the interface moves onto the current PrismaUI framework, the crafting menu and the settlement build panel can be played with a controller, and a long list of crafting and settlement fixes makes both menus steadier. Controller support is still awaiting its full in-game acceptance pass.
+Workshop Rebuilt 1.2.0: the interface moves onto the current PrismaUI framework, the crafting menu and the settlement build panel can be played with a controller, and a long list of crafting and settlement fixes makes both menus steadier. Controller support is still awaiting its full in-game acceptance pass.
 
 [b]Important[/b]
 
@@ -15,7 +15,7 @@ It supports [b]Fallout 4 1.10.163 (Old-Gen)[/b] and [b]1.11.191, 1.11.221 and 1.
 [list]
 [*]The D-pad now navigates both the crafting menu and the settlement build panel, with a visible focus outline that follows your selection and scrolls it into view.[/*]
 [*]You can enter and leave the settlement panel without a keyboard: [b]Back[/b] (View/Share) takes cursor focus and hands it back. Previously this needed the C key, which a controller cannot press.[/*]
-[*]A crafts, confirms and places; B backs out and cancels; X opens the scrap confirmation; Y favourites and tags the selected item. Holding B closes the crafting menu or the Workshop.[/*]
+[*]A crafts, confirms and places; B backs out and cancels; X opens the scrap confirmation; Y favourites and tags the selected item.[/*]
 [*]Crafting: D-pad Left/Right move along the filter row and reach the pager; LB/RB switch categories; B backs out of a recipe's detail view; the Stations panel keeps focus.[/*]
 [*]Settlement panel: Left/Right browse, Up/Down change category, LB/RB walk the dock tabs, and the shortcuts for every free-build key work from the pad. Selecting an item no longer places it by itself.[/*]
 [*]Button prompts render the framework's shared Xbox and PlayStation art at a consistent size, and refresh when you pick up or put down a controller.[/*]
@@ -32,7 +32,7 @@ It supports [b]Fallout 4 1.10.163 (Old-Gen)[/b] and [b]1.11.191, 1.11.221 and 1.
 [*]The menu recovers after a filter hides your current category, after the page is recreated, after a failed binding, and when reopening a bench. Cooking titles stay correct across refreshes, and stale station and cheat-mode state is cleared on reopen.[/*]
 [*]UNLOCK ALL and upgrade refresh work on every bench open, and workbench upgrades are saved with your game.[/*]
 [*]Cheat mode is off unless you switch it on in the ini ([b]AllowCheatMode[/b]); the toggle is hidden while it is off.[/*]
-[*]Names and prices display correctly with non-English characters, and the interface has packaged translations.[/*]
+[*]Names and prices display correctly with non-English characters, and the interface text is translatable through the framework's translation files (English is shipped).[/*]
 [/list]
 
 [size=4][b]Settlement build helper[/b][/size]
@@ -40,7 +40,7 @@ It supports [b]Fallout 4 1.10.163 (Old-Gen)[/b] and [b]1.11.191, 1.11.221 and 1.
 [list]
 [*]The helper now arms on every supported game version, and a bad menu entry can no longer stop it from loading.[/*]
 [*]Placement and scrap no longer fall out of step when a settlement changes, a menu closes mid-action, or an item is placed twice; a cancelled placement cleans up its ghost and any half-spawned object.[/*]
-[*]Materials: building takes from the workshop's own storage first and only charges the plugin for its own placements. The happiness figure matches the one the game's HUD shows.[/*]
+[*]Materials: building takes from the workshop's own storage first and only charges the plugin for its own placements. Happiness is read from the workshop's own getter.[/*]
 [*]The catalog pages long lists, keeps favourites and filters, shows tool requirements in the detail panel, and refreshes when it changes. Tilt, rotate and move only work on a held item.[/*]
 [*]Rotation and movement settings can no longer hang the game with extreme values, and malformed key bindings and panel messages are rejected.[/*]
 [*]Placement notices show as translated text.[/*]
@@ -65,7 +65,6 @@ It supports [b]Fallout 4 1.10.163 (Old-Gen)[/b] and [b]1.11.191, 1.11.221 and 1.
 [list]
 [*]The plugin now ships the framework's current public interface instead of an older pinned copy.[/*]
 [*]The release archive installs through its bundled FOMOD: a mod manager installs the plugin, the interface files and the sounds in one step.[/*]
-[*]Builds now run on GitHub (Windows runner) against the Next-Gen compatible CommonLibF4.[/*]
 [/list]
 
 [/spoiler]
