@@ -313,18 +313,18 @@ namespace WeaponBench
         {
             g_wbViewReady.store(false, std::memory_order_release);
             if (!g_api || a_view == 0) return;
-            if (!BindGameThreadUIEvent(a_view, "prisma_close", [](const char*, void*) {
+            if (!BindGameThreadUIEventSafe(a_view, "prisma_close", [](const char*, void*) {
                     // Constraint: the native Escape poll already moved the session to kClosing; the JS close is the same key.
                     if (g_phase.load(std::memory_order_acquire) != Phase::kClosing) RequestClose();
                 })) {
                 logger::critical("PrismaCrafting: weapon bench close binding failed; vanilla bench kept");
                 return;
             }
-            if (!BindGameThreadUIEvent(a_view, "weapon_bench_action", [](const char* a_arg, void*) { HandleAction(a_arg); })) {
+            if (!BindGameThreadUIEventSafe(a_view, "weapon_bench_action", [](const char* a_arg, void*) { HandleAction(a_arg); })) {
                 logger::critical("PrismaCrafting: weapon bench action binding failed; vanilla bench kept");
                 return;
             }
-            if (!BindGameThreadUIEvent(a_view, "weapon_bench_ready", [](const char*, void*) { g_jsReady.store(true, std::memory_order_release); })) {
+            if (!BindGameThreadUIEventSafe(a_view, "weapon_bench_ready", [](const char*, void*) { g_jsReady.store(true, std::memory_order_release); })) {
                 logger::critical("PrismaCrafting: weapon bench ready binding failed; vanilla bench kept");
                 return;
             }
@@ -450,11 +450,11 @@ namespace WeaponBench
                 const bool escapeDown = (GetAsyncKeyState(VK_ESCAPE) & 0x8000) != 0;
                 DWORD foregroundPid = 0;
                 GetWindowThreadProcessId(GetForegroundWindow(), &foregroundPid);
+                const bool nativeEscape = !g_jsReady.load(std::memory_order_acquire) && foregroundPid == GetCurrentProcessId();
                 XINPUT_STATE pad{};
-                const bool padB = XInputGetState(0, &pad) == ERROR_SUCCESS &&
+                const bool padB = nativeEscape && XInputGetState(0, &pad) == ERROR_SUCCESS &&
                     (pad.Gamepad.wButtons & XINPUT_GAMEPAD_B) != 0;
                 static bool s_padBHeld = false;
-                const bool nativeEscape = !g_jsReady.load(std::memory_order_acquire) && foregroundPid == GetCurrentProcessId();
                 if (nativeEscape && ((escapeDown && !s_escapeHeld) || (padB && !s_padBHeld))) {
                     logger::info("PrismaCrafting: native Escape/pad-B closed the weapon bench (JS not ready)");
                     RequestClose();

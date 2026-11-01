@@ -146,6 +146,7 @@ namespace crafting::weaponbench
         json out = json::object();
         out["session"] = a_in.session;
         out["revision"] = a_in.revision;
+        out["installAvailable"] = false;
         out["weapons"] = json::array();
         for (const auto& w : a_in.weapons) {
             out["weapons"].push_back({ { "id", EncodeWeaponId({ w.baseId, w.stackIndex }) }, { "name", w.name }, { "equipped", w.equipped } });

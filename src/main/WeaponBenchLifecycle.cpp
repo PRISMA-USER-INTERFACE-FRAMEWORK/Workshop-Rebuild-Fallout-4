@@ -16,8 +16,8 @@ namespace WeaponBench
 
     void Initialize(bool a_flag)
     {
-        detail::SetDev(LoadWeaponBenchDev());
         if (!a_flag || detail::EnabledValue()) return;
+        detail::SetDev(LoadWeaponBenchDev());
         if (!crafting::ids::WorkshopDataResolvable()) {
             logger::warn("PrismaCrafting: [Experimental]NativeWeaponBench ignored -- unsupported runtime");
             return;

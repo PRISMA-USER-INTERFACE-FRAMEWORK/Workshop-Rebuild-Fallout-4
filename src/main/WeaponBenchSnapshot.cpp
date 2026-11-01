@@ -188,7 +188,6 @@ namespace WeaponBench
             return lower.find("dummy") != std::string::npos;
         }
 
-        // Constraint: installed OMODs own the visible pieces; the base weapon model is often a receiver dummy.
         void CollectModMeshes(RE::BGSMod::Attachment::Mod* a_mod, int a_depth, std::vector<std::string>& a_out)
         {
             if (!a_mod || a_depth > 3) return;
@@ -229,7 +228,6 @@ namespace WeaponBench
             bool built = false;
         };
 
-        // Constraint: OMOD forms are static for the process, so the scan runs once instead of on every click.
         const ModIndex& Mods()
         {
             static ModIndex index;
@@ -357,7 +355,7 @@ namespace WeaponBench
             }
             for (auto& c : name) c = c == '_' ? ' ' : static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
             if (name.empty()) {
-                LogOnce("slot display name source unverified (R11); using numbered labels");
+                LogOnce("slot display name unavailable; using numbered labels");
                 return std::format("SLOT {}", a_ordinal + 1);
             }
             return name;

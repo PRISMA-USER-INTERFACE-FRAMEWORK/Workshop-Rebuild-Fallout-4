@@ -166,10 +166,11 @@
     if (!choices.length) el('choices').appendChild(text('p', current ? 'No attachments match this filter.' : 'No slot selected.'));
     if (selected) el('part-name').textContent = selected.name; else setText('part-name','NO PART SELECTED');
     if (selected) el('part-description').textContent = selected.description || ''; else setText('part-description','Inspect an attachment before making a change.');
-    el('exchange').textContent = selected && current && current.installed
+    el('exchange').textContent = selected && !state.installAvailable ? tx('Installing parts is not available yet.')
+      : selected && current && current.installed
       ? tx('Replaces {{name}}.', {name: current.installed.name}) + (current.installed.returns ? ' ' + tx('The fitted part returns to inventory.') : '')
       : '';
-    el('install').disabled = !ready() || !selected || !selected.compatible || selected.count < 1 || !!(current.installed && current.installed.id === selected.id);
+    el('install').disabled = !(state && state.installAvailable) || !ready() || !selected || !selected.compatible || selected.count < 1 || !!(current.installed && current.installed.id === selected.id);
     el('remove').disabled = !ready() || !current || !current.installed || !current.removable;
     if (focusKey) {
       const target = Array.from(document.querySelectorAll('main button:not([disabled])')).find(node => node.dataset.key === focusKey);
@@ -294,7 +295,7 @@
     const api = window.PrismaCG;
     if (!api) { bar.replaceChildren(); return; }
     const ps = !!(data && data.ps);
-    const items = (data && data.items) || [];
+    const items = [...((data && data.items) || []), ...((data && data.nav) || [])];
     bar.replaceChildren(...items.map(item => {
       if (!item || typeof item !== 'object') return null;
       const node = document.createElement('span'); node.className = 'ctrl';
@@ -310,6 +311,7 @@
   };
   window.addEventListener('resize', syncPreviews);
   document.addEventListener('scroll', syncPreviews, true);
+  window.hidePreviews = function () { previewsClosed = true; hidePreviews(); };
   window.addEventListener('pagehide', hidePreviews);
   render();
 })();
