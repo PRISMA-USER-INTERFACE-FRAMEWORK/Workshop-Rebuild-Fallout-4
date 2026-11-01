@@ -64,5 +64,5 @@ target("PrismaCrafting")
         add_defines("_CRT_USE_BUILTIN_OFFSETOF")
     end
 
-    add_syslinks("bcrypt", "version", "comctl32", "advapi32")
+    add_syslinks("bcrypt", "version", "comctl32", "advapi32", "xinput")
     set_targetdir("$(builddir)/windows/x64/release")
