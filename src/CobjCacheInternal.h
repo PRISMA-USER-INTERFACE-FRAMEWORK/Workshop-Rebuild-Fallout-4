@@ -51,7 +51,6 @@ namespace CobjCache
     bool RecipeConditionsPass(const Recipe& r, RE::PlayerCharacter* player,
                                      const std::vector<RE::TESObjectREFR*>& sources);
     bool MatchesCraftBench(const Recipe& r, const std::vector<uint32_t>& wantIds, bool cookingBench);
-    void ResetCraftBenchScopeWarning();
     bool CmpOp(double a, const std::string& op, double b);
     Json ConfigRequirementsJson(const Recipe& r, RE::PlayerCharacter* player,
                                 const std::vector<RE::TESObjectREFR*>& sources);
