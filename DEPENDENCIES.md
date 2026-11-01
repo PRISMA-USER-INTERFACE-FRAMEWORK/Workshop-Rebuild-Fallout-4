@@ -8,7 +8,7 @@ first.
 
 | Dependency | Version this build targets | Required |
 |---|---|---|
-| Fallout 4 | 1.10.163 (OG), or the Anniversary Edition runtimes the loader accepts (1.11.191, 1.11.221, 1.11.240); NG 1.10.980-1.10.984 is rejected at plugin query | yes |
+| Fallout 4 | 1.10.163 (OG), or the Anniversary Edition runtimes the loader accepts (1.11.191, 1.11.221, 1.11.240); NG 1.10.980 and 1.10.984 also load, with the settlement workshop features off until NG addresses are found for their globals | yes |
 | F4SE | matching the game runtime | yes |
 | F4SE version database (Address Lib) | the database matching the game runtime | yes — engine functions are bound by their version-database ID, not raw offsets |
 | PrismaUI_F4 framework | PrismaUI 2.2.0+ runtime; 2.1.1 public API headers | yes |

@@ -14,8 +14,8 @@ namespace crafting::anchors
         if (!ids::WorkshopDataResolvable()) {
             logger::warn("PrismaCrafting: [ANCHORS] runtime {}.{}.{}.{} has no engine anchor "
                          "mappings -- the workshop features are unavailable here and nothing was "
-                         "resolved. This is the intended outcome on true Next-Gen "
-                         "(1.10.980-1.10.984), which crafting does not support.",
+                         "resolved. On Next-Gen (1.10.980-1.10.984) the settlement "
+                         "workshop paths stay off until NG addresses are found for its globals.",
                          ver.major(), ver.minor(), ver.patch(), ver.build());
             return false;
         }

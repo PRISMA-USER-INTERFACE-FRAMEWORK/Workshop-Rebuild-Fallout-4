@@ -40,7 +40,7 @@ next to this repo, then run:
 xmake
 ```
 
-The plugin targets Fallout 4 1.10.163 (OG) and the Anniversary Edition runtimes the loader accepts (1.11.191, 1.11.221, 1.11.240). NG 1.10.980-1.10.984 is rejected at plugin query. The build produces PrismaCrafting.dll.
+The plugin targets Fallout 4 1.10.163 (OG) and the Anniversary Edition runtimes the loader accepts (1.11.191, 1.11.221, 1.11.240) and Next-Gen 1.10.980 and 1.10.984. On NG the settlement workshop features stay off until NG addresses are found for their globals. The build produces PrismaCrafting.dll.
 See [DEPENDENCIES.md](DEPENDENCIES.md) for the framework and CommonLibF4 versions.
 
 ## Layout

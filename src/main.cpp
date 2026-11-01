@@ -429,12 +429,13 @@ extern "C" DLLEXPORT bool F4SEAPI F4SEPlugin_Query(const F4SE::QueryInterface* a
         logger::critical("Loaded in editor — aborting.");
         return false;
     }
-    // Constraint: only the runtimes the vendored ids were verified against are accepted; the AE family shares one binary layout.
+    // Constraint: NG loads, but the workshop paths stay behind WorkshopDataResolvable() until NG addresses exist for the 47xxxxx globals.
     const auto runtime = a_f4se->RuntimeVersion();
-    if (runtime != F4SE::RUNTIME_1_10_163 && runtime != F4SE::RUNTIME_1_11_191 &&
+    if (runtime != F4SE::RUNTIME_1_10_163 && runtime != F4SE::RUNTIME_1_10_980 &&
+        runtime != F4SE::RUNTIME_1_10_984 && runtime != F4SE::RUNTIME_1_11_191 &&
         runtime != F4SE::RUNTIME_1_11_221 && runtime != F4SE::RUNTIME_1_11_240) {
-        logger::critical("Unsupported runtime {}. Supported runtimes are OG 1.10.163 and AE 1.11.191, "
-                         "1.11.221 and 1.11.240", runtime.string());
+        logger::critical("Unsupported runtime {}. Supported runtimes are OG 1.10.163, NG 1.10.980 and 1.10.984, "
+                         "and AE 1.11.191, 1.11.221 and 1.11.240", runtime.string());
         return false;
     }
     return true;
