@@ -1,4 +1,3 @@
-// Constraint: moved native bindings must match source:src/main.cpp at 5fc7723.
 #include "RuntimeInternal.h"
 
 template <class F>
@@ -26,6 +25,7 @@ static void QueueWorkshopTransferSync(bool transferVisible)
         const auto menu = ui->GetMenu("ContainerMenu");
         const bool drawn = menu && menu->uiMovie && menu->uiMovie->GetVisible();
         if (drawn != transferVisible) return;
+        if (g_api->IsHidden(g_helperView) == transferVisible && WorkshopInputHook::IsActive() == !transferVisible) return;
         if (transferVisible) {
             logger::info("PrismaCrafting: [TRANSFER-SYNC] transfer screen up -- hiding helper");
             g_api->Hide(g_helperView);
@@ -56,12 +56,18 @@ public:
 
         if (s_installed) return true;
         REL::Relocation<std::uintptr_t> vtable{ RE::VTABLE::WorkshopMenu[0] };
-        _ProcessMessage = vtable.write_vfunc(0x3, &WorkshopMenuHook::ProcessMessage);
-        _AdvanceMovie   = vtable.write_vfunc(0x4, &WorkshopMenuHook::AdvanceMovie);
-        if (!_ProcessMessage.address() || !_AdvanceMovie.address()) {
+        // TODO-verify: slots 3/4 are the existing placement hook targets; the rollback below only restores them.
+        const auto originalProcess = vtable.write_vfunc(0x3, &WorkshopMenuHook::ProcessMessage);
+        const auto originalAdvance = vtable.write_vfunc(0x4, &WorkshopMenuHook::AdvanceMovie);
+        if (!originalProcess || !originalAdvance) {
+            // Constraint: a half-applied vtable patch must be rolled back, or a retry saves our own hook as the original.
+            if (originalProcess) vtable.write_vfunc(0x3, originalProcess);
+            if (originalAdvance) vtable.write_vfunc(0x4, originalAdvance);
             logger::critical("PrismaCrafting: WorkshopMenu interception incomplete; replacement disabled");
             return false;
         }
+        _ProcessMessage = REL::Relocation<std::uintptr_t>{ originalProcess };
+        _AdvanceMovie = REL::Relocation<std::uintptr_t>{ originalAdvance };
         s_installed = true;
         logger::info("PrismaCrafting: WorkshopMenu vtable hooked (slots 3/4 -- placement engine)");
         return true;
@@ -73,7 +79,7 @@ private:
 
     static void CancelPlacement()
     {
-        RetirePlacementOwnership();
+        ResetPlacementOwnership();
         g_placing.store(false);
 
         if (crafting::ids::WorkshopDataResolvable())
@@ -95,13 +101,17 @@ private:
             if (const int ticks = g_scrapSuppressLatch.load(); ticks > 0)
                 g_scrapSuppressLatch.store(ticks - 1);
 
-            if (g_open && g_api && g_api->IsValid(g_helperView)) {
+            DWORD foregroundPid = 0;
+            GetWindowThreadProcessId(GetForegroundWindow(), &foregroundPid);
+            if (g_open && g_api && g_api->IsValid(g_helperView) && foregroundPid == GetCurrentProcessId() &&
+                !WorkshopTransferScreenUp()) {
                 const bool placing = g_placing.load();
                 const bool overlay = g_scrapOverlayOpen.load();
 
                 const bool tabDown = (GetAsyncKeyState(VK_TAB) & 0x8000) != 0;
                 if (tabDown && !s_tab) {
                     s_tab = true;
+                    if (WorkshopInputHook::IsTyping()) return RE::UI_MESSAGE_RESULTS::kHandled;
                     if (overlay) {
                         CancelScrapConfirm();
                         return RE::UI_MESSAGE_RESULTS::kHandled;
@@ -135,6 +145,8 @@ private:
                     }
                     else if (placing) CancelPlacement();
                 } else if (!escDown) { s_esc = false; }
+            } else {
+                s_tab = s_scrap = s_esc = true;
             }
         }
         return _ProcessMessage(a_this, a_message);
@@ -198,7 +210,8 @@ private:
 
 void CancelPlacementFromUI()
 {
-    if (WorkshopSessionActive(g_wsSession.load(std::memory_order_acquire)) && g_placing.load()) WorkshopMenuHook::CancelPlacement();
+    if (WorkshopSessionActive(g_wsSession.load(std::memory_order_acquire)) && PlacementInFlight())
+        WorkshopMenuHook::CancelPlacement();
 }
 
 static const char* WorkshopReplacementBlocker()
@@ -297,7 +310,7 @@ public:
 
                 g_placementQueue.InvalidateSession();
                 g_placementQueue.Clear();
-                g_ghostRef.Store({});
+                CloseGhostForMenu();
 
                 SetWorkshopVanillaSuppressed(false);
                 WorkshopInputHook::OnClosed();
@@ -308,6 +321,11 @@ public:
                 DestroyAllViews();
             LogMemory("workshop CLOSE (post)");
             }
+            return RE::BSEventNotifyControl::kContinue;
+        }
+
+        if (WeaponBench::Enabled() && a_event.menuName == "ExamineMenu") {
+            WeaponBench::OnExamineMenuEvent(a_event);
             return RE::BSEventNotifyControl::kContinue;
         }
 
@@ -350,6 +368,7 @@ public:
             LogMemory("bench OPEN");
 
             g_open = true;
+            ResetCraftCheatMode();
             const std::uint32_t craftGen = ++g_craftMenuGeneration;
 
             if (!OnMainThread("craft-menu-open", [craftGen](const char*) {
@@ -371,8 +390,13 @@ public:
                 }
             } else {
 
-                if (!g_craftingControlsReady.load(std::memory_order_acquire) && !RetryCraftingControls(av)) {
-                    AbortCraftReplacement("reused crafting view is not control-ready", craftGen);
+                if (!g_craftingControlsReady.load(std::memory_order_acquire)) {
+                    if (!RetryCraftingControls(av)) {
+                        AbortCraftReplacement("reused crafting view is not control-ready", craftGen);
+                        return;
+                    }
+                } else if (!RefreshCraftingSessionBindings(av, craftGen)) {
+                    AbortCraftReplacement("crafting session binding refresh failed", craftGen);
                     return;
                 }
 
@@ -392,6 +416,7 @@ public:
                 return RE::BSEventNotifyControl::kContinue;
             }
             ++g_craftMenuGeneration;
+            ResetCraftCheatMode();
             logger::info("PrismaCrafting: {} closing", a_event.menuName.c_str());
             LogMemory("bench CLOSE (pre)");
             g_open = false;
@@ -411,52 +436,11 @@ public:
 };
 static void ReportMenuInterceptors()
 {
-    auto* ui = RE::UI::GetSingleton();
-    if (!ui) return;
-    auto* src = ui->GetEventSource<RE::MenuOpenCloseEvent>();
-    if (!src) return;
-    using SinkT = RE::BSTEventSink<RE::MenuOpenCloseEvent>;
-    auto& sinks = *reinterpret_cast<RE::BSTArray<SinkT*>*>(
-        reinterpret_cast<std::uintptr_t>(src) + 0x08);
-    auto* ours = static_cast<SinkT*>(MenuOpenCloseHandler::GetSingleton());
-
     logger::warn("PrismaCrafting: [CONFLICT] a chem/cooking bench menu is open but PrismaCrafting never "
-                 "received its event -- another mod intercepted it. Menu-event sinks in dispatch order:");
-    std::string aheadOfUs;
-    bool passedUs = false;
-    int idx = 0;
-    for (auto* sink : sinks) {
-        if (!sink) { ++idx; continue; }
-        void* vtbl = *reinterpret_cast<void* const*>(sink);
-        std::string name = "<unknown>";
-        HMODULE hmod{};
-        char path[MAX_PATH]{};
-        if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                               reinterpret_cast<LPCSTR>(vtbl), &hmod) &&
-            GetModuleFileNameA(hmod, path, sizeof(path))) {
-            std::string p(path);
-            const auto slash = p.find_last_of("\\/");
-            name = (slash == std::string::npos) ? p : p.substr(slash + 1);
-        }
-        const bool isOurs = (sink == ours);
-        logger::warn("PrismaCrafting: [CONFLICT]   #{} {}{}", idx, name, isOurs ? "  <-- PrismaCrafting" : "");
-        if (isOurs) passedUs = true;
-        else if (!passedUs && name != "PrismaCrafting.dll") {
-            if (!aheadOfUs.empty()) aheadOfUs += ", ";
-            aheadOfUs += name;
-        }
-        ++idx;
-    }
-    if (aheadOfUs.empty()) {
-        logger::warn("PrismaCrafting: [CONFLICT] no other mod is registered ahead of us -- the interceptor "
-                     "registers dynamically or hooks the menu directly; check other crafting/workbench UI mods.");
-        return;
-    }
-    logger::warn("PrismaCrafting: [CONFLICT] these mods hook menu events before PrismaCrafting and may be "
-                 "swallowing the crafting menu: {}", aheadOfUs);
-    const std::string msg = "PrismaCrafting: crafting menu intercepted by another mod (" + aheadOfUs +
-                            ") -- see PrismaCrafting.log";
-    RE::SendHUDMessage::ShowHUDMessage(msg.c_str(), nullptr, true, false);
+                 "received its event -- another mod intercepted it. Menu-event sink order is engine-private, "
+                 "so check the load order and other crafting/workbench UI mods.");
+    RE::SendHUDMessage::ShowHUDMessage(
+        "PrismaCrafting: crafting menu intercepted by another mod -- see PrismaCrafting.log", nullptr, true, false);
 }
 
 static void CheckCraftMenuBypass(const RE::MenuOpenCloseEvent& a_event)
@@ -470,7 +454,7 @@ static void CheckCraftMenuBypass(const RE::MenuOpenCloseEvent& a_event)
     crafting::bypass::MenuEventFacts facts{};
     facts.opening = a_event.opening;
     facts.eventIsCraftMenu = IsCraftMenu(a_event.menuName);
-    facts.weOwnAnOpenBench = g_open.load();
+    facts.weOwnAnOpenBench = g_open.load() || BenchBypassActive();
     facts.benchMenuRegistered = ui->GetMenu(RE::BSFixedString("CookingMenu")) ||
                                 ui->GetMenu(RE::BSFixedString("ChemistryMenu"));
 

@@ -326,7 +326,7 @@
     background:
       radial-gradient(ellipse 95% 85% at 50% 24%, rgba(0,0,0,0) 28%, rgba(0,0,0,0.70) 100%),
       linear-gradient(rgba(0,0,0,0.62), rgba(0,0,0,0.62)),
-      url("backgrounds/stationbackground.png") center / cover no-repeat,
+      url("../backgrounds/stationbackground.png") center / cover no-repeat,
       #050404; }
 
   #wbLamp { position: absolute; inset: 0; pointer-events: none; z-index: 0; opacity: 0.5;

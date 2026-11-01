@@ -4,13 +4,29 @@
 #include <RE/B/BGSKeywordForm.h>
 #include <RE/B/BGSKeyword.h>
 #include <RE/RTTI.h>
+#include <cctype>
+#include <string_view>
 
 namespace CobjCache
 {
-    // Constraint: source:src/CobjCacheScanner.cpp at 57f2d5c; retain the established metadata interfaces.
     bool HasAny(const std::string& hay, std::initializer_list<const char*> needles)
     {
         for (auto* n : needles) if (hay.find(n) != std::string::npos) return true;
+        return false;
+    }
+
+    bool HasWord(const std::string& hay, std::initializer_list<const char*> needles)
+    {
+        const auto letterAt = [&](std::size_t i) { return i < hay.size() && std::isalpha(static_cast<unsigned char>(hay[i])) != 0; };
+        for (auto* n : needles) {
+            const std::string_view needle{n};
+            for (auto pos = hay.find(needle); pos != std::string::npos; pos = hay.find(needle, pos + 1)) {
+                const auto end = pos + needle.size();
+                if ((pos == 0 || !letterAt(pos - 1)) &&
+                    (!letterAt(end) || (hay.compare(end, 1, "s") == 0 && !letterAt(end + 1)) ||
+                     (hay.compare(end, 2, "es") == 0 && !letterAt(end + 2)))) return true;
+            }
+        }
         return false;
     }
 
@@ -49,15 +65,15 @@ namespace CobjCache
             return "WEAPONS";
         }
         if (formType == "ALCH" || formType == "INGR") {
-            if (HasAny(nameLower, {"stim","medkit","med-x","med x","heal","bandage","gauze","splint","tourniquet","antibiotic","anodyne","cure","first aid","trauma","rad-away","radaway","rad-x","radx","addictol","antivenom","hydra","quikclot","ibuprofen","injector","iodide","painkiller","morphine","antiseptic","disinfect","salve","ointment","aspirin","penicillin","medic","pharmaceutical"})) return "HEALING";
-            if (HasAny(nameLower, {"jet","psycho","buffout","mentat","daytripper","day tripper","calmex","overdrive","fury","ultra jet","x-cell","stealth boy","skeeto","bufftats","chem","pax","berry"})) return "DRUGS";
-            if (HasAny(nameLower, {"water","nuka","beer","wine","vodka","whiskey","rum","liquor","beverage","drink","juice","coffee","tea","milk","cola","moonshine","bourbon","buzzbites"})) return "DRINKS";
+            if (HasWord(nameLower, {"stimpak","medkit","med-x","med x","heal","healing","bandage","gauze","splint","tourniquet","antibiotic","anodyne","cure","first aid","trauma","rad-away","radaway","rad-x","radx","addictol","antivenom","hydra","quikclot","ibuprofen","injector","iodide","painkiller","morphine","antiseptic","disinfect","disinfectant","salve","ointment","aspirin","penicillin","medic","medicine","medical","pharmaceutical"})) return "HEALING";
+            if (HasWord(nameLower, {"jet","psycho","psychojet","psychobuff","buffjet","buffout","mentat","daytripper","day tripper","calmex","overdrive","fury","ultra jet","x-cell","stealth boy","skeeto","bufftats","chem","pax","berry"})) return "DRUGS";
+            if (HasWord(nameLower, {"water","nuka","nukashine","beer","wine","vodka","whiskey","rum","liquor","beverage","drink","juice","coffee","tea","milk","cola","moonshine","bourbon","buzzbites"})) return "DRINKS";
             return "FOOD";
         }
         if (HasAny(nameLower, {"backpack","duffle","rucksack","satchel","bandolier","mailbag","shoulder bag","pouch","carrying device"})) return "BACKPACKS";
         if (HasAny(nameLower, {"gas mask","gasmask","respirator","goggle","eyepatch","visor","night vision"})) return "HEADGEAR";
         if (formType == "ARMO") {
-            if (HasAny(nameLower, {"mask","hood","helm","hat","goggle","visor","respirator","glasses","eyepatch","scarf","bandana"})) return "HEADGEAR";
+            if (HasWord(nameLower, {"mask","hood","hoodie","helm","helmet","hat","goggle","visor","respirator","glasses","sunglasses","hardhat","eyepatch","scarf","bandana"})) return "HEADGEAR";
             return "ARMOR";
         }
         return "UTILITY";

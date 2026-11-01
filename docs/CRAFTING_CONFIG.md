@@ -51,8 +51,10 @@ type a global id by hand in the editor if you need one.)
 ## Schema
 Top-level object keyed by a recipe match key (tried in order):
 1. `createdKey` — `"Plugin.esp|<localFormID hex>"` of the **created item** (most stable).
-2. COBJ **EditorID**.
-3. 8-hex **runtime COBJ Form ID**.
+2. COBJ **EditorID** — case-insensitive.
+3. runtime COBJ form id — hex, padded or not, case-insensitive (`10C3AD` and `Fallout4.esm|0010C3AD` both work).
+
+Keys are normalised on load and on lookup: the plugin name and EditorID are lowercased, and a bare hex key is zero-padded, so `Fallout4.esm|0010C3AD`, `fallout4.esm|10c3ad` and `10C3AD` are all the same override. Two keys that normalise to the same override keep one entry and log the duplicate; which one wins is not defined by file order, so do not rely on it.
 
 ```jsonc
 {
@@ -113,7 +115,7 @@ Selectors match exact, case-sensitive editor IDs. `editorId` matches either the 
 
 Established weapon keywords, head slots and consumable metadata retain their categories ahead of mappings. Ammunition and books keep their type categories. Mappings do not change Workshop menu paths, source records, costs or unlock conditions. Final categories feed the existing workbench tier/score policy; assigning a miscellaneous output to another category can therefore change its upgrade gate.
 
-Unknown category IDs, extra fields, missing/both selectors, non-string fields, empty/whitespace-only IDs, embedded NULs and repeated selectors of the same kind reject the entire array. Existing recipe cost/gate overrides remain usable. An absent or empty array preserves default classification. Load the file before the recipe index is built; restart the game after changes because the index and configuration remain build-once for the session.
+Unknown category IDs, missing/both selectors, non-string fields, empty/whitespace-only IDs, embedded NULs and repeated selectors of the same kind are skipped with a warning; the remaining rules still apply, so one bad entry or a `_comment` field no longer discards the whole array. Extra fields inside a rule (for example a note) are ignored. An array with no valid rules, or an absent array, preserves default classification, and a non-array `_classification` keeps it too. Load the file before the recipe index is built; restart the game after changes because the index and configuration remain build-once for the session.
 
 The visual editor preserves this section when loading and saving an existing config; edit the rules in JSON. It also preserves unsupported section shapes, leaving validation to the native loader.
 

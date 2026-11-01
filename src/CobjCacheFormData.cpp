@@ -20,7 +20,6 @@
 #include <cstdio>
 #include <cstring>
 
-// Constraint: source:src/CobjCache.cpp at d29b1aa; preserve the extracted form handling.
 namespace CobjCache
 {
     std::string GetName(RE::TESForm* form)
@@ -82,7 +81,6 @@ namespace CobjCache
     void ComputeReqOwnership(const Recipe& r, RE::PlayerCharacter* player,
                                     std::vector<bool>& perkOwned, std::vector<bool>& toolOk)
     {
-        // Constraint: source:src/CobjCacheFormData.cpp at eae9602; preserve the existing form lookup and rank API.
         perkOwned.reserve(r.reqPerks.size());
         for (const auto& pr : r.reqPerks) {
             bool owned = false;

@@ -15,6 +15,16 @@ std::string CraftPageEpoch()
     return token;
 }
 
+void RefreshCraftPageAfterUpgrade()
+{
+    if (!CraftSessionActive() || !g_api || !g_api->IsGameThread()) return;
+    const auto view = ActiveView();
+    if (!g_api->IsValid(view)) return;
+    InvalidateCraftPageQuery();
+    g_api->InteropCall(view, "setPageEpoch", CraftPageEpoch().c_str());
+    g_api->InteropCall(view, "refreshPage", "");
+}
+
 void RequestCraftingPage(const char* arg)
 {
     if (!CraftSessionActive() || !g_api || !g_api->IsGameThread()) return;
@@ -60,7 +70,9 @@ void RequestCraftingPage(const char* arg)
     if (complete || queryRequest != request) return;
 
     std::string search = parts[0];
-    for (auto& c : search) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    for (auto& c : search) c = c == '_' ? ' ' : static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    search.erase(0, search.find_first_not_of(" \t\r\n"));
+    search.erase(search.find_last_not_of(" \t\r\n") + 1);
     const auto category = parts[1].empty() ? std::string("ALL") : parts[1];
     const auto sub = parts[6].empty() ? std::string("ALL") : parts[6];
     const int page = ParseIntOr(parts[4], 0);

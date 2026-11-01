@@ -1,5 +1,5 @@
-// Constraint: moved native bindings must match source:src/main.cpp at 5fc7723.
 #include "RuntimeInternal.h"
+#include <REX/FModule.h>
 
 std::atomic<bool> g_placing{ false };
 static std::atomic<bool> g_placementUpdateQueued{ false };
@@ -80,6 +80,40 @@ namespace WSExt
 
 static constexpr float kBoundlessGhostFallbackDistance = 300.0f;
 
+namespace
+{
+    // Constraint: the vanilla selection globals are OG 1.10.163 only; every other runtime keeps the manual path.
+    constexpr std::uintptr_t kVanillaTopLevelNodes = 0x58E0860;
+    constexpr std::uintptr_t kVanillaMenuDepth = 0x58DF5DC;
+
+    bool VanillaMenuSelectionSupported()
+    {
+        const auto version = REX::FModule::GetExecutingModule().GetFileVersion();
+        return version.major() == 1 && version.minor() == 10 && version.patch() == 163;
+    }
+
+    bool SelectVanillaMenuPath(const std::vector<RE::Workshop::WorkshopMenuNode*>& a_path)
+    {
+        if (!VanillaMenuSelectionSupported() || a_path.size() < 2) return false;
+        const auto base = REX::FModule::GetExecutingModule().GetBaseAddress();
+        auto* top = *reinterpret_cast<RE::Workshop::WorkshopMenuNode***>(base + kVanillaTopLevelNodes);
+        auto* depth = reinterpret_cast<std::uint32_t*>(base + kVanillaMenuDepth);
+        if (!top || !top[0] || top[0] != WSExt::RootNode() || top[0] != a_path.front()) return false;
+
+        top[0]->selected = true;
+        a_path.front()->selected = true;
+        for (std::size_t i = 1; i < a_path.size(); ++i) {
+            for (auto& child : a_path[i - 1]->children)
+                if (child) child->selected = false;
+            a_path[i]->selected = true;
+        }
+        *depth = static_cast<std::uint32_t>(a_path.size() - 1);
+        logger::debug("PrismaCrafting: [GHOST] vanilla selection set for depth {} (root {:08X})",
+                      a_path.size() - 1, a_path.front()->recipe ? a_path.front()->recipe->GetFormID() : 0);
+        return true;
+    }
+}
+
 std::string DescribeRef(RE::TESObjectREFR* a_ref)
 {
     if (!a_ref) return "<null>";
@@ -154,6 +188,12 @@ static bool EngineHoldsOurGhost()
         return false;
     }
     return true;
+}
+
+void CloseGhostForMenu()
+{
+    if (EngineHoldsOurGhost()) DestroyGhostNow();
+    else g_ghostRef.Store({});
 }
 
 void DestroyGhostNow()
@@ -259,6 +299,22 @@ bool SpawnPlacementGhost(std::uint32_t a_recipeId, std::uint32_t a_createdId)
     DeleteGhostRef(g_ghostRef.Load(), "SpawnPlacementGhost stale-cleanup");
     g_ghostRef.Store({});
 
+    if (object->GetFormType() == RE::ENUM_FORM_ID::kFLOR) {
+        if (SelectVanillaMenuPath(path)) {
+            RE::Workshop::CreateNewReference(ctx, false);
+            if (auto* floraHandle = RE::Workshop::GetPlacementItem(); floraHandle && floraHandle->get()) {
+                g_ghostRef.Store(*floraHandle);
+                logger::info("PrismaCrafting: [GHOST] flora {:08X} spawned through the vanilla placement path",
+                             object->GetFormID());
+                return true;
+            }
+            logger::warn("PrismaCrafting: vanilla flora placement produced no placement item");
+        } else {
+            logger::warn("PrismaCrafting: vanilla menu selection unavailable for flora {:08X}", object->GetFormID());
+        }
+        return false;
+    }
+
     if (crafting::ids::WorkshopDataResolvable()) {
         if (auto* transl = RE::Workshop::GetPlacementItemTranslLS()) {
             transl->x = 0.0f;
@@ -321,10 +377,19 @@ static void PumpDeferredPlacement()
     }
 }
 
+static std::atomic<bool> g_inputRestorePending{ false };
+
+void RequestWorkshopInputRestore()
+{
+    g_inputRestorePending.store(true, std::memory_order_release);
+}
+
 void PumpDeferredWorkshopTick()
 {
     DWORD expected = 0;
     g_workshopThreadId.compare_exchange_strong(expected, ::GetCurrentThreadId());
+    if (g_inputRestorePending.exchange(false, std::memory_order_acq_rel))
+        WorkshopInputHook::OnPlacementEnded(g_open.load());
     PumpDeferredScrap();
     PumpDeferredPlacement();
 }

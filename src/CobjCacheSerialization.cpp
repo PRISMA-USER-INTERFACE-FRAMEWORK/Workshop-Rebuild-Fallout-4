@@ -1,4 +1,3 @@
-// Constraint: serialized schema preserves source:src/CobjCacheSerialization.cpp at 9a79493.
 #include "CobjCacheInternal.h"
 #include "WorkbenchUpgrades.h"
 #include <charconv>

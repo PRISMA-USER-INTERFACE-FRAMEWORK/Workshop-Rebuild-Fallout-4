@@ -17,7 +17,6 @@
 #include <thread>
 #include <utility>
 
-// Constraint: source:src/CobjCache.cpp at d29b1aa; preserve the extracted export ordering.
 namespace CobjCache
 {
     static std::mutex s_exportLock;
@@ -36,8 +35,23 @@ namespace CobjCache
         return cached == 1;
     }
 
+    // Constraint: only this destination's .new-* attempts older than an hour are swept, so a live writer's fresh temp survives.
+    static void SweepStaleTemps(const std::filesystem::path& path)
+    {
+        const auto prefix = path.filename().string() + ".new-";
+        const auto cutoff = std::filesystem::file_time_type::clock::now() - std::chrono::hours(1);
+        std::error_code ec;
+        for (std::filesystem::directory_iterator it(path.parent_path(), ec), end; !ec && it != end; it.increment(ec)) {
+            const auto name = it->path().filename().string();
+            if (name.rfind(prefix, 0) != 0) continue;
+            const auto stamp = it->last_write_time(ec);
+            if (!ec && stamp < cutoff) std::filesystem::remove(it->path(), ec);
+        }
+    }
+
     static bool WriteExportFile(const std::filesystem::path& path, const std::string& data)
     {
+        SweepStaleTemps(path);
         const auto temp = crafting::ini::MakeTempPath(path);
         std::error_code ec;
         std::ofstream out(temp, std::ios::binary | std::ios::noreplace);
@@ -140,7 +154,7 @@ namespace CobjCache
         }).detach();
     }
 
-    static std::set<std::string> s_exportedBenches;
+    static std::string s_lastExportedBenches;
 
     void ExportCurrentView(const std::vector<uint32_t>& benchIds)
     {
@@ -155,10 +169,11 @@ namespace CobjCache
             std::sort(sorted.begin(), sorted.end());
             std::string key;
             for (auto id : sorted) { char b[12]; std::snprintf(b, sizeof(b), "%08X,", id); key += b; }
-            if (!s_exportedBenches.insert(key).second) {
-                logger::debug("ExportCurrentView: bench [{}] already exported this session, skipping", key);
+            if (key == s_lastExportedBenches) {
+                logger::debug("ExportCurrentView: bench [{}] is the last export, skipping", key);
                 return;
             }
+            s_lastExportedBenches = key;
 
             for (std::size_t i = 0; i < index.recipes.size(); ++i) {
                 const auto& r = index.recipes[i];

@@ -32,7 +32,7 @@ set_encodings("utf-8")
 add_rules("mode.release")
 
 add_requireconfs("spdlog", {configs = {header_only = false, wchar = true, std_format = true}, override = true})
-add_requires("spdlog v1.16.0", "fmt", "nlohmann_json v3.12.0")
+add_requires("spdlog v1.16.0", "fmt v11.0.2", "nlohmann_json v3.12.0")
 
 if is_host("linux") then
     add_requireconfs("**.cmake", {system = true, override = true})
@@ -64,5 +64,5 @@ target("PrismaCrafting")
         add_defines("_CRT_USE_BUILTIN_OFFSETOF")
     end
 
-    add_syslinks("bcrypt", "version", "comctl32", "advapi32")
+    add_syslinks("bcrypt", "version", "comctl32", "advapi32", "xinput")
     set_targetdir("$(builddir)/windows/x64/release")

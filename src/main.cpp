@@ -1,11 +1,20 @@
 #include "main/RuntimeInternal.h"
 
+static std::atomic<bool> s_formsLoaded{ false };
+
+static void InitUpgradesForCoSave()
+{
+    if (s_formsLoaded.load(std::memory_order_acquire)) WorkbenchUpgrades::Init();
+}
+
 static void CoSave_Save(const F4SE::SerializationInterface* intfc)
 {
+    InitUpgradesForCoSave();
     WorkbenchUpgrades::CoSaveWrite(intfc);
 }
 static void CoSave_Load(const F4SE::SerializationInterface* intfc)
 {
+    InitUpgradesForCoSave();
     logger::info("PrismaCrafting: co-save LOAD begin");
     std::uint32_t type = 0, ver = 0, len = 0;
     int n = 0;
@@ -19,6 +28,7 @@ static void CoSave_Load(const F4SE::SerializationInterface* intfc)
 }
 static void CoSave_Revert(const F4SE::SerializationInterface*)
 {
+    InitUpgradesForCoSave();
     logger::info("PrismaCrafting: co-save REVERT begin");
     WorkbenchUpgrades::CoSaveRevert();
     logger::info("PrismaCrafting: co-save REVERT end");
@@ -122,10 +132,8 @@ static void QueueRuntimeInitialization()
 
 void SetWorkshopVanillaSuppressed(bool suppressed)
 {
-    if (!g_api) return;
-    g_api->SuppressVanillaMenu("WorkshopMenu", suppressed);
-    g_api->SuppressVanillaMenu("PromptMenu", suppressed);
-    g_api->SuppressVanillaMenu("ButtonBarMenu", suppressed);
+    for (const char* menu : { "WorkshopMenu", "PromptMenu", "ButtonBarMenu" })
+        suppressed ? VanillaMenuSuppression::Claim(menu) : VanillaMenuSuppression::Release(menu);
 }
 
 static std::atomic<std::uint32_t> g_pendingWorkshopAbortSession{ 0 };
@@ -152,7 +160,10 @@ void AbortWorkshopReplacement(const char* reason, std::uint32_t session)
     logger::critical("PrismaCrafting: workshop replacement aborted: {}", reason ? reason : "unknown failure");
     g_open.store(false, std::memory_order_release);
     ++g_wsSession;
-    RetirePlacementOwnership();
+    ResetPlacementOwnership();
+    g_placementQueue.InvalidateSession();
+    g_placementQueue.Clear();
+    DestroyGhostNow();
     HideScrapOverlay();
     WorkshopInputHook::SetActive(false);
     WorkshopFreedom::SetWorkshopActive(false);
@@ -193,8 +204,12 @@ static void InitializePostLoadOnGameThread()
         return;
     }
 
-    static bool sinksRegistered = false;
-    if (!sinksRegistered) {
+    g_allowCheatMode.store(LoadAllowCheatMode(), std::memory_order_release);
+    g_modelPreviews.store(LoadModelPreviews(), std::memory_order_release);
+    WeaponBench::Initialize(LoadNativeWeaponBench());
+
+    static bool menuSinksRegistered = false;
+    if (!menuSinksRegistered) {
         auto* ui = RE::UI::GetSingleton();
         auto* menuEvents = ui ? ui->GetEventSource<RE::MenuOpenCloseEvent>() : nullptr;
         if (!menuEvents) {
@@ -205,7 +220,18 @@ static void InitializePostLoadOnGameThread()
         RegisterMenuEvents(menuEvents);
         RegisterWorkshopPlacedSink();
         RegisterWorkshopDestroyedSink();
-        g_workshopMenuHookReady.store(InstallWorkshopMenuHook(), std::memory_order_release);
+        menuSinksRegistered = true;
+    }
+    if (!g_workshopMenuHookReady.load(std::memory_order_acquire)) {
+        const bool hookReady = InstallWorkshopMenuHook();
+        g_workshopMenuHookReady.store(hookReady, std::memory_order_release);
+        if (!hookReady) {
+            logger::critical("PrismaCrafting: WorkshopMenu hook installation failed; post-load initialization will retry");
+            return;
+        }
+    }
+    static bool sinksRegistered = false;
+    if (!sinksRegistered) {
         sinksRegistered = true;
         logger::info("PrismaCrafting: post-load UI and workshop sinks initialized");
     }
@@ -229,13 +255,17 @@ static void InitializeRuntimeOnGameThread()
     if (!g_runtimeInitComplete.load(std::memory_order_acquire)) {
         if (!g_anchorCheckComplete.exchange(true, std::memory_order_acq_rel))
             g_anchorHealthReady.store(crafting::anchors::LogAll(), std::memory_order_release);
-        g_api->SuppressVanillaMenuIf("ExamineConfirmMenu", []() -> bool {
-            return (g_open.load() && IsCraftMenu(MenuName()))
-                || g_scrapOverlayOpen.load()
-                || g_scrapAfterPlacementCancelTicks.load() > 0
-                || g_scrapSuppressLatch.load() > 0;
-        });
-        WorkshopInputHook::Init(&g_api, &g_helperView);
+        static std::atomic<bool> s_inputHooksPrepared{ false };
+        if (!s_inputHooksPrepared.exchange(true, std::memory_order_acq_rel)) {
+            g_api->SuppressVanillaMenuIf("ExamineConfirmMenu", []() -> bool {
+                return (g_open.load() && IsCraftMenu(MenuName()))
+                    || WeaponBench::SessionActive()
+                    || g_scrapOverlayOpen.load()
+                    || g_scrapAfterPlacementCancelTicks.load() > 0
+                    || g_scrapSuppressLatch.load() > 0;
+            });
+            WorkshopInputHook::Init(&g_api, &g_helperView);
+        }
         if (!WorkshopInputHook::Install()) {
             logger::error("PrismaCrafting: workshop input containment unavailable; runtime initialization will retry");
             return;
@@ -248,7 +278,6 @@ static void InitializeRuntimeOnGameThread()
             g_anchorHealthReady.load(std::memory_order_acquire) && WorkshopFreedom::InstallHooks(),
             std::memory_order_release);
         WorkshopFreedom::SetPreUpdateHook(&PumpDeferredWorkshopTick);
-        RegisterCoSave();
         g_runtimeInitComplete.store(true, std::memory_order_release);
         logger::info("PrismaCrafting: V11 runtime initializer complete");
     }
@@ -268,8 +297,12 @@ static void F4SEMessageHandler(F4SE::MessagingInterface::Message* message)
             logger::error("PrismaCrafting: failed to get PrismaUI API (V11) — PrismaUI_F4 must load first");
         else
             logger::info("PrismaCrafting: PrismaUI V11 API acquired");
+        VanillaMenuSuppression::Configure([](const char* a_menu, bool a_suppress) -> bool {
+            return g_api && g_api->SuppressVanillaMenu(a_menu, a_suppress);
+        });
         PrismaCraftingThreading::SetApi(g_api);
         PrismaFlatApi::Init();
+        s_formsLoaded.store(true, std::memory_order_release);
         g_gameDataReady.store(g_api != nullptr, std::memory_order_release);
         QueueRuntimeInitialization();
         break;
@@ -319,6 +352,17 @@ static void InitPluginRuntime()
     static std::atomic<bool> s_done{ false };
     if (s_done.exchange(true)) return;
 
+    auto path = Paths::F4SEUserDir() / "PrismaCrafting.log";
+    auto stream = std::make_shared<std::ofstream>(path, std::ios::out | std::ios::binary | std::ios::trunc);
+    if (stream->is_open()) stream->exceptions(std::ios::badbit | std::ios::failbit);
+    auto sink = std::shared_ptr<spdlog::sinks::ostream_sink_mt>(
+        new spdlog::sinks::ostream_sink_mt(*stream),
+        [stream](auto* owned) mutable { delete owned; stream.reset(); });
+    auto log  = std::make_shared<spdlog::logger>("global log"s, std::move(sink));
+    log->flush_on(spdlog::level::trace);
+    spdlog::set_default_logger(log);
+    spdlog::set_pattern("[%Y-%m-%d %T.%e] [%l] [%t] [%s:%#] %v");
+
     const bool iniCreated = crafting::ini::EnsureSettingsIni(SettingsIniPath());
 
     bool debugOn = false;
@@ -342,18 +386,7 @@ static void InitPluginRuntime()
                                                   catOverride[i]));
     }
 
-    const auto level = debugOn ? spdlog::level::debug : spdlog::level::info;
-    auto path = Paths::F4SEUserDir() / "PrismaCrafting.log";
-    auto stream = std::make_shared<std::ofstream>(path, std::ios::out | std::ios::binary | std::ios::trunc);
-    if (stream->is_open()) stream->exceptions(std::ios::badbit | std::ios::failbit);
-    auto sink = std::shared_ptr<spdlog::sinks::ostream_sink_mt>(
-        new spdlog::sinks::ostream_sink_mt(*stream),
-        [stream](auto* owned) mutable { delete owned; stream.reset(); });
-    auto log  = std::make_shared<spdlog::logger>("global log"s, std::move(sink));
-    log->set_level(level);
-    log->flush_on(spdlog::level::trace);
-    spdlog::set_default_logger(std::move(log));
-    spdlog::set_pattern("[%Y-%m-%d %T.%e] [%l] [%t] [%s:%#] %v");
+    log->set_level(debugOn ? spdlog::level::debug : spdlog::level::info);
 
     static constexpr const char* PRISMACRAFTING_VERSION = PRISMACRAFTING_VERSION_STRING;
     logger::info("PrismaCrafting v{} — debug logging {} — log: PrismaCrafting.log",
@@ -381,7 +414,7 @@ static void InitPluginRuntime()
                  "furniture-swapper benches (ECO Universal Workbench) will be {}",
                  g_interceptFurnitureSwapperBenches.load(std::memory_order_acquire),
                  g_interceptFurnitureSwapperBenches.load(std::memory_order_acquire)
-                     ? "INTERCEPTED (experimental, #20)" : "left to the vanilla menu");
+                     ? "INTERCEPTED (experimental)" : "left to the vanilla menu");
 
 }
 
@@ -391,16 +424,19 @@ extern "C" DLLEXPORT bool F4SEAPI F4SEPlugin_Query(const F4SE::QueryInterface* a
 
     a_info->infoVersion = F4SE::PluginInfo::kVersion;
     a_info->name        = "PrismaCrafting";
-    a_info->version     = 1;
+    a_info->version     = REL::Version{ PRISMACRAFTING_VERSION_MAJOR, PRISMACRAFTING_VERSION_MINOR,
+                                        PRISMACRAFTING_VERSION_PATCH, 0 }.pack();
 
     if (a_f4se->IsEditor()) {
         logger::critical("Loaded in editor — aborting.");
         return false;
     }
-    if (a_f4se->RuntimeVersion() != F4SE::RUNTIME_1_10_163 &&
-        a_f4se->RuntimeVersion() < F4SE::RUNTIME_1_11_137) {
-        logger::critical("Unsupported runtime {}. Supported runtimes are OG 1.10.163 and AE 1.11.137 or later",
-                         a_f4se->RuntimeVersion().string());
+    // Constraint: only the runtimes the vendored ids were verified against are accepted; the AE family shares one binary layout.
+    const auto runtime = a_f4se->RuntimeVersion();
+    if (runtime != F4SE::RUNTIME_1_10_163 && runtime != F4SE::RUNTIME_1_11_191 &&
+        runtime != F4SE::RUNTIME_1_11_221 && runtime != F4SE::RUNTIME_1_11_240) {
+        logger::critical("Unsupported runtime {}. Supported runtimes are OG 1.10.163 and AE 1.11.191, "
+                         "1.11.221 and 1.11.240", runtime.string());
         return false;
     }
     return true;
@@ -413,6 +449,7 @@ extern "C" DLLEXPORT bool F4SEAPI F4SEPlugin_Load(const F4SE::LoadInterface* a_f
     InitPluginRuntime();
 
     F4SE::Init(a_f4se, F4SE::InitInfo{ .log = false });
+    RegisterCoSave();
 
     const auto* messaging = F4SE::GetMessagingInterface();
     if (!messaging) {

@@ -66,6 +66,8 @@
 
 namespace CobjCache
 {
+    static std::atomic<bool> s_benchScopeWarning{ false };
+
 
     static std::unique_ptr<const RecipeScan> s_recipeIndex;
     static std::unordered_map<std::size_t, std::string> s_descriptions;
@@ -263,6 +265,10 @@ namespace CobjCache
         }
         logger::debug("CobjCache::Build: enumerating constructible objects...");
         auto candidate = std::make_unique<const RecipeScan>(ScanRecipes({ arr.data(), arr.size() }));
+        if (candidate->playerMissing) {
+            logger::warn("CobjCache::Build: no player during requirement scan -- not publishing; will retry on the next bench open");
+            return;
+        }
         const size_t recipeCount = candidate->recipes.size();
         const size_t modCount = std::count_if(candidate->recipes.begin(), candidate->recipes.end(),
             [](const Recipe& r) { return r.isMod; });
@@ -381,9 +387,20 @@ namespace CobjCache
 
     bool MatchesCraftBench(const Recipe& r, const std::vector<uint32_t>& wantIds, bool cookingBench)
     {
+        // Constraint: an unresolved bench scope lists nothing; it must not open every non-workshop recipe.
+        if (wantIds.empty()) {
+            if (!s_benchScopeWarning.exchange(true, std::memory_order_acq_rel))
+                logger::warn("CobjCache: craft bench scope is empty; listing no recipes until the bench keywords resolve");
+            return false;
+        }
         return !r.isWorkshop && !r.isMod &&
-               (wantIds.empty() || std::find(wantIds.begin(), wantIds.end(), r.benchKeywordId) != wantIds.end()) &&
+               std::find(wantIds.begin(), wantIds.end(), r.benchKeywordId) != wantIds.end() &&
                cookingBench == (r.benchKeywordId == kWorkbenchCookingKeyword);
+    }
+
+    void ResetCraftBenchScopeWarning()
+    {
+        s_benchScopeWarning.store(false, std::memory_order_release);
     }
 
     std::vector<Recipe> All()
@@ -521,7 +538,8 @@ namespace CobjCache
         const int total = static_cast<int>(finalIdx.size());
         const int pageCount = (total + pageSize - 1) / pageSize;
         if (page < 0) page = 0;
-        if (pageCount > 0 && page >= pageCount) page = pageCount - 1;
+        if (pageCount == 0) page = 0;
+        else if (page >= pageCount) page = pageCount - 1;
         const size_t start = static_cast<size_t>(page) * pageSize;
         const size_t end = (std::min)(finalIdx.size(), start + static_cast<size_t>(pageSize));
 

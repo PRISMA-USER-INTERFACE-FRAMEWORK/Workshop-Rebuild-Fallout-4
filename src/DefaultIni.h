@@ -67,6 +67,11 @@ namespace crafting::ini
 ;  PrismaUI view lifecycle and the JS bridge
 ;View=1
 
+;  Weapon bench dev mode: list every attachment for every slot as a virtual
+;  owned part (runtime-only; no items are added to the save). Read from
+;  [Debug] by src/main/CraftingSettings.cpp:LoadWeaponBenchDev.
+;WeaponBenchDev=1
+
 ; ----------------------------------------------------------------------------
 ;  [UI]
 ; ----------------------------------------------------------------------------
@@ -79,6 +84,19 @@ namespace crafting::ini
 ;  Normally set in-game; stored here so it persists.
 ;CraftScale=100
 ;HelperScale=100
+
+;  Show live 3D model previews in the crafting page. Turn this off if previews
+;  stutter or freeze on your machine.
+;ModelPreviews=1
+
+; ----------------------------------------------------------------------------
+;  [Gameplay]
+; ----------------------------------------------------------------------------
+[Gameplay]
+
+;  Allow the crafting page's Cheat Mode toggle. Off by default: the toggle is
+;  hidden and native ignores cheat-mode requests, so recipes obey normal costs.
+;AllowCheatMode=0
 
 ; ----------------------------------------------------------------------------
 ;  [Workshop] -- build-mode placement and camera
@@ -113,7 +131,20 @@ namespace crafting::ini
 ;RollKey=0x67
 ;RotateStepDegrees=15.0
 
-;  Nudge the held object.
+;  Nudge the held object. Each direction can be rebound.
+;  Home
+;MoveForwardKey=0x24
+;  End
+;MoveBackKey=0x23
+;  Insert
+;MoveRightKey=0x2D
+;  Delete
+;MoveLeftKey=0x2E
+;  Page Up
+;MoveUpKey=0x21
+;  Page Down
+;MoveDownKey=0x22
+;  Steps are clamped: ScaleStep 0.001-0.5, RotateStepDegrees 0.5-90, MoveStepUnits 0.1-50.
 ;MoveStepUnits=5.0
 
 ;  Cycle snapping modes, and reset the held object's transform.
@@ -163,6 +194,16 @@ namespace crafting::ini
 ;  and intercepting them can conflict with the mod that owns them. Turn it on
 ;  if you would rather use PrismaCrafting's menu there.
 ;InterceptFurnitureSwapperBenches=0
+
+; ----------------------------------------------------------------------------
+;  [Experimental] -- unfinished features, off by default
+; ----------------------------------------------------------------------------
+[Experimental]
+
+;  Open PrismaCrafting's weapon workbench screen on weapon benches instead of
+;  the vanilla one. Work in progress: the screen opens and closes but does not
+;  list or change weapon attachments yet, so leave it off for normal play.
+;NativeWeaponBench=0
 
 ; ----------------------------------------------------------------------------
 ;  [Author] -- mod authoring

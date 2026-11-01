@@ -4,6 +4,7 @@
 #include "PlaceInRed.h"
 #include "PrismaGameThreadCompat.h"
 #include "WorkshopIDs.h"
+#include "WorkshopInputHook.h"
 
 #include <RE/P/PlayerCharacter.h>
 #include <RE/W/Workshop.h>
@@ -84,7 +85,7 @@ namespace WorkshopPlacementInput
         auto* player = RE::PlayerCharacter::GetSingleton();
         auto* handle = RE::Workshop::GetPlacementItem();
         const bool placeInRed = PlaceInRed::PlaceInRedOn();
-        const bool hasGhost = player && player->parentCell && handle && handle->get();
+        const bool hasGhost = player && player->parentCell && handle && handle->get() && WorkshopInputHook::HoldingPlacement();
         const bool canPlace = hasGhost && RE::Workshop::CanPlaceItem();
         if (!hasGhost || (!canPlace && !placeInRed)) {
             logger::warn("WorkshopPlacementInput: UI Place requested without a placeable active ghost");

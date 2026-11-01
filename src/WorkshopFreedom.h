@@ -17,6 +17,9 @@ namespace WorkshopFreedom
     void ToggleObjectSnap();
     void ResetTransform();
     void NudgeScale(float delta);
+float ScaleStep();
+float RotateStep();
+float MoveStep();
     void NudgeRotate(int axis, float degrees);
     void NudgeMove(int axis, float units);
 

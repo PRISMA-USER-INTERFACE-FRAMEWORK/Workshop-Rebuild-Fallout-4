@@ -1,4 +1,3 @@
-// Constraint: craft admission keeps current menu keywords (source:src/CobjCache.h:CraftRecipe) and payload formats (source:src/main/CraftingView.cpp at e19e520).
 #include "RuntimeInternal.h"
 #include <nlohmann/json.hpp>
 
@@ -106,10 +105,8 @@ void SetCraftVanillaSuppressed(bool suppressed)
             if (menu->uiMovie) menu->uiMovie->SetVisible(!suppressed);
         }
     }
-    if (!g_api) return;
-    g_api->SuppressVanillaMenu("PromptMenu", suppressed);
-    g_api->SuppressVanillaMenu("ButtonBarMenu", suppressed);
-    g_api->SuppressVanillaMenu("PauseMenu", suppressed);
+    for (const char* name : { "PromptMenu", "ButtonBarMenu", "PauseMenu" })
+        suppressed ? VanillaMenuSuppression::Claim(name) : VanillaMenuSuppression::Release(name);
 }
 
 static std::atomic<std::uint32_t> g_pendingCraftAbortGeneration{ 0 };
@@ -173,19 +170,71 @@ bool ActivateCraftReplacement(PrismaView av)
 
 static std::atomic<PrismaView> g_failedCraftBindingsView{ 0 };
 
+// Constraint: userdata carries the captured menu generation because the binding takes a plain function pointer.
+static bool BindSaveUnlockAll(PrismaView view, std::uint32_t generation)
+{
+    return BindGameThreadUIEventSafe(view, "saveUnlockAll", [](const char* arg, void* userdata) {
+        const auto boundGeneration = static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(userdata));
+        if (!CraftSessionMatches(boundGeneration) || !g_api || !g_api->IsGameThread()) return;
+        const auto av = ActiveView();
+        if (!g_api->IsValid(av)) return;
+        const bool enabled = arg && arg[0] == '1';
+        WorkbenchUpgrades::SetUnlockAll(enabled);
+        SaveUnlockAllBenches(enabled);
+        logger::info("PrismaCrafting: [Workbench]UnlockAllBenches = {}", enabled);
+        g_api->InteropCall(av, "setUnlockAll", enabled ? "1" : "0");
+        PushRecipesForCurrentBench();
+    }, reinterpret_cast<void*>(static_cast<std::uintptr_t>(generation)));
+}
+
+static bool BindCheatToggle(PrismaView view, std::uint32_t generation)
+{
+    return BindGameThreadUIEventSafe(view, "prisma_cheat", [](const char* arg, void* userdata) {
+        const auto boundGeneration = static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(userdata));
+        if (!CraftSessionMatches(boundGeneration)) return;
+        if (!g_allowCheatMode.load(std::memory_order_acquire)) {
+            logger::warn("PrismaCrafting: cheat mode refused ([Gameplay]AllowCheatMode=0)");
+            return;
+        }
+        g_cheatMode = (arg && arg[0] == '1');
+        logger::info("PrismaCrafting: cheat mode = {}", g_cheatMode.load());
+    }, reinterpret_cast<void*>(static_cast<std::uintptr_t>(generation)));
+}
+
+static void PushCraftCheatState(PrismaView view)
+{
+    if (!g_api || !g_api->IsValid(view)) return;
+    g_api->InteropCall(view, "setCheatAllowed", g_allowCheatMode.load(std::memory_order_acquire) ? "1" : "0");
+    g_api->InteropCall(view, "setCheatState", "0");
+}
+
+bool RefreshCraftingSessionBindings(PrismaView view, std::uint32_t generation)
+{
+    if (!g_api || !g_api->IsValid(view) || !CraftSessionMatches(generation)) return false;
+    if (BindSaveUnlockAll(view, generation) && BindCheatToggle(view, generation)) {
+        PushCraftCheatState(view);
+        return true;
+    }
+    g_failedCraftBindingsView.store(view, std::memory_order_release);
+    g_craftingControlsReady.store(false, std::memory_order_release);
+    logger::critical("PrismaCrafting: crafting session binding refresh failed; view will remain inactive");
+    return false;
+}
+
 static void PrepareCraftingView(PrismaView view, bool dispatchBootstrap)
 {
+    CobjCache::ResetCraftBenchScopeWarning();
     logger::info("PrismaCrafting: OnDomReady ENTER (view={}, open={})", view, g_open.load());
     if (!g_api || view == 0) return;
     const auto craftGen = g_craftMenuGeneration.load(std::memory_order_acquire);
     g_craftingControlsReady.store(false, std::memory_order_release);
     bool controlsReady = true;
 
-    if (!BindGameThreadUIEvent(view, "prisma_close", [](const char*, void*) {
+    if (!BindGameThreadUIEventSafe(view, "prisma_close", [](const char*, void*) {
         CloseCrafting();
     })) controlsReady = false;
 
-    if (!BindGameThreadUIEvent(view, "notePrompts", [](const char* arg, void*) {
+    if (!BindGameThreadUIEventSafe(view, "notePrompts", [](const char* arg, void*) {
         if (!g_api) return;
         const auto v = g_view.load();
         if (!g_api->IsValid(v)) return;
@@ -193,21 +242,21 @@ static void PrepareCraftingView(PrismaView view, bool dispatchBootstrap)
         PushControllerPrompts(v);
     })) controlsReady = false;
 
-    if (!BindGameThreadUIEvent(view, "prisma_refresh", [](const char*, void*) {
+    if (!BindGameThreadUIEventSafe(view, "prisma_refresh", [](const char*, void*) {
         if (!CraftSessionActive()) return;
         PushRecipesForCurrentBench();
     })) controlsReady = false;
 
-    if (!BindGameThreadUIEvent(view, "requestPage", [](const char* arg, void*) {
+    if (!BindGameThreadUIEventSafe(view, "requestPage", [](const char* arg, void*) {
         RequestCraftingPage(arg);
     })) controlsReady = false;
 
-    if (!BindGameThreadUIEvent(view, "requestWorkbenches", [](const char*, void*) {
+    if (!BindGameThreadUIEventSafe(view, "requestWorkbenches", [](const char*, void*) {
         if (!CraftSessionActive()) return;
         PushWorkbenches();
     })) controlsReady = false;
 
-    if (!BindGameThreadUIEvent(view, "startUpgrade", [](const char* arg, void*) {
+    if (!BindGameThreadUIEventSafe(view, "startUpgrade", [](const char* arg, void*) {
         if (!CraftSessionActive()) return;
         if (!arg || !arg[0]) return;
         std::string id(arg);
@@ -217,10 +266,10 @@ static void PrepareCraftingView(PrismaView view, bool dispatchBootstrap)
         bool ok = WorkbenchUpgrades::StartUpgrade(id, GetBenchSourceRefs(), &reason);
         logger::info("startUpgrade('{}') -> {} ({})", id, ok ? "OK" : "REJECT", reason);
         PushWorkbenches();
-        if (ok) PushRecipesForCurrentBench();
+        if (ok) RefreshCraftPageAfterUpgrade();
     })) controlsReady = false;
 
-    if (!BindGameThreadUIEvent(view, "requestDesc", [](const char* arg, void*) {
+    if (!BindGameThreadUIEventSafe(view, "requestDesc", [](const char* arg, void*) {
         if (!CraftSessionActive()) return;
         auto av = ActiveView();
         if (!g_api || !g_api->IsValid(av) || !arg || !arg[0]) return;
@@ -231,7 +280,7 @@ static void PrepareCraftingView(PrismaView view, bool dispatchBootstrap)
         g_api->InteropCall(av, "setDesc", (std::string(hdr) + desc).c_str());
     })) controlsReady = false;
 
-    if (!BindGameThreadUIEvent(view, "prisma_craft", [](const char* arg, void*) {
+    if (!BindGameThreadUIEventSafe(view, "prisma_craft", [](const char* arg, void*) {
         if (!CraftSessionActive()) return;
         if (!arg || !arg[0]) { logger::debug("prisma_craft: empty arg, ignored"); return; }
         const std::string_view request(arg);
@@ -250,31 +299,37 @@ static void PrepareCraftingView(PrismaView view, bool dispatchBootstrap)
         int made = CobjCache::CraftRecipe(formRef, g_cheatMode, GetBenchSourceRefs(), qty,
                                           benchIds, g_cookingBench.load());
         logger::info("PrismaCrafting: craft {:08X} x{} (cheat={}) -> made {}", formRef, qty, g_cheatMode.load(), made);
-        if (made > 0) {
-
+        {
             auto av = ActiveView();
             if (g_api && g_api->IsValid(av)) {
                 char b[32]; std::snprintf(b, sizeof(b), "%08X,%d", formRef, made);
                 g_api->InteropCall(av, "setPostCraft", b);
             }
-            PushRecipesForCurrentBench();
+            if (made > 0) PushRecipesForCurrentBench();
         }
     })) controlsReady = false;
 
-    g_api->RegisterJSListener(view, "prisma_cheat", [](const char* arg) {
-        g_cheatMode = (arg && arg[0] == '1');
-        logger::info("PrismaCrafting: cheat mode = {}", g_cheatMode.load());
-    });
+    if (!BindCheatToggle(view, craftGen)) controlsReady = false;
 
-    g_api->RegisterJSListener(view, "saveTheme", [](const char* arg) {
+    g_api->RegisterJSListener(view, "saveTheme", SafeJSListener([](const char* arg) {
         SaveTheme(arg ? arg : "tarkov");
         logger::info("PrismaCrafting: theme = {}", arg ? arg : "tarkov");
-    });
-    g_api->RegisterJSListener(view, "saveUiScale", [](const char* arg) {
+    }));
+    g_api->RegisterJSListener(view, "saveUiScale", SafeJSListener([](const char* arg) {
         SaveScale("CraftScale", arg ? ParseIntOr(arg, 100) : 100);
-    });
+    }));
+    if (!BindSaveUnlockAll(view, craftGen)) controlsReady = false;
 
-    if (!BindGameThreadUIEvent(view, "prisma_loaded", [](const char*, void*) {
+    g_api->RegisterJSListener(view, "saveModelPreviews", SafeJSListener([](const char* arg) {
+        const bool enabled = !(arg && arg[0] == '0');
+        g_modelPreviews.store(enabled, std::memory_order_release);
+        SaveModelPreviews(enabled);
+        logger::info("PrismaCrafting: [UI]ModelPreviews = {}", enabled);
+        auto av = ActiveView();
+        if (g_api && g_api->IsValid(av)) g_api->InteropCall(av, "setModelPreviews", enabled ? "1" : "0");
+    }));
+
+    if (!BindGameThreadUIEventSafe(view, "prisma_loaded", [](const char*, void*) {
         auto av = ActiveView();
         if (!ActivateCraftReplacement(av)) return;
         logger::info("PrismaCrafting: {} view activated post-load (typing enabled)", MenuName().c_str());
@@ -301,6 +356,8 @@ static void PrepareCraftingView(PrismaView view, bool dispatchBootstrap)
         g_api->InteropCall(view, "setUiScale", sc);
         g_api->InteropCall(view, "setTheme", LoadTheme().c_str());
     }
+    PushCraftCheatState(view);
+    g_api->InteropCall(view, "setModelPreviews", g_modelPreviews.load(std::memory_order_acquire) ? "1" : "0");
 
     g_api->SetScrollingPixelSize(view, 100);
 

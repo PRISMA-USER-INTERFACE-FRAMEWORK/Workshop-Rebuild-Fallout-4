@@ -5,9 +5,14 @@ let _mpCardStatusHooked = false;
 
 const DETAIL_BRIGHTNESS = 1.95, DETAIL_ZOOM = 1.15;
 const CARD_BRIGHTNESS   = 1.75, CARD_ZOOM   = 1.0;
-function modelPreview(){
+if (window.__pcModelPreviews === undefined) window.__pcModelPreviews = true;
+function previewApi(){
   const a = window.__prismaUI_modelPreview;
   return (a && typeof a.show === 'function') ? a : null;
+}
+function modelPreview(){
+  if (window.__pcModelPreviews === false) return null;
+  return previewApi();
 }
 
 function clipHostForPreview(){
@@ -56,7 +61,7 @@ function clipTo(el, boundary){
 }
 function ensureCardPreviewStatus(){
   if (_mpCardStatusHooked) return;
-  const api = modelPreview();
+  const api = previewApi();
   if (!api || typeof api.onStatus !== "function") return;
   _mpCardStatusHooked = true;
   api.onStatus((s) => {
@@ -70,7 +75,7 @@ function ensureCardPreviewStatus(){
     if (entry && entry.el) entry.el.classList.remove("has3d");
 
     if (s.id === "detail") _mpDetail = null;
-    const api = modelPreview();
+    const api = previewApi();
     if (api) api.hide({ id: s.id });
   });
 }
@@ -91,7 +96,8 @@ function retryWithAltMesh(id){
   return true;
 }
 function showCardPreview(entry){
-  const api = modelPreview();
+  const api = previewApi();
+  const enabled = window.__pcModelPreviews !== false;
   const box = entry && entry.el;
 
   if (_overlayDepth > 0) {
@@ -99,7 +105,7 @@ function showCardPreview(entry){
     if (box) box.classList.remove("has3d");
     return;
   }
-  if (!api || !entry || !box || !cardIconVisible(box)) {
+  if (!api || !enabled || !entry || !box || !cardIconVisible(box)) {
     if (api && entry) api.hide({ id: entry.id });
     if (box) box.classList.remove("has3d");
     return;
@@ -124,6 +130,9 @@ function showCardPreview(entry){
   if (paths && paths.length > 1) opts.nifPaths = paths;
   else if (paths) opts.nifPath = paths[0];
   else { api.hide({ id: entry.id }); box.classList.remove("has3d"); return; }
+  const key = JSON.stringify(opts);
+  if (entry.key === key) return;
+  entry.key = key;
   api.show(opts);
   box.classList.add("has3d");
 }
@@ -131,7 +140,7 @@ function syncCardPreviews(){
   Object.keys(_mpCards).forEach((id) => { showCardPreview(_mpCards[id]); });
 }
 function hideCardPreviews(){
-  const api = modelPreview();
+  const api = previewApi();
   Object.keys(_mpCards).forEach((id) => {
     if (api) api.hide({ id: id });
     if (_mpCards[id].el) _mpCards[id].el.classList.remove("has3d");
@@ -140,19 +149,19 @@ function hideCardPreviews(){
 }
 
 function hideCardPreviewsKeepEntries(){
-  const api = modelPreview();
+  const api = previewApi();
   Object.keys(_mpCards).forEach((id) => {
     if (api) api.hide({ id: id });
     if (_mpCards[id].el) _mpCards[id].el.classList.remove("has3d");
   });
 }
 function showLivePreview(r){
-  const api = modelPreview();
+  const api = previewApi();
 
   if (_overlayDepth > 0) { if (api) api.hide({ id: "detail" }); _overlayDetail = r; return; }
   const p = document.getElementById("preview");
   const hasComposite = r && r.nifPaths && r.nifPaths.length > 1;
-  if (!api || !r || (!r.nifPath && !hasComposite)) {
+  if (!api || window.__pcModelPreviews === false || !r || (!r.nifPath && !hasComposite)) {
     hideLivePreview();
     if (p) p.innerHTML = '<span id="previewIcon" class="pv-none">' + (api ? '' : esc(pcText('3D PREVIEW OFF'))) + '</span>';
     return;
@@ -175,7 +184,7 @@ function showLivePreview(r){
   _mpDetail = r;
 }
 function hideLivePreview(){
-  const api = modelPreview(); if (api) api.hide({ id: "detail" });
+  const api = previewApi(); if (api) api.hide({ id: "detail" });
   const p = document.getElementById("preview");
   if (p) p.classList.remove("has3d");
   _mpDetail = null;
@@ -198,11 +207,12 @@ function popPreviewOverlay(){
 
 function showWbBenchPreview(b, force){
   const api = modelPreview();
+  const raw = previewApi();
   const p = document.getElementById("wbPreview");
   if (!p) { _wbBenchShown = null; return; }
   if (!api || !b || !b.nif) {
     p.innerHTML = '<span class="pv-none">' + (api ? '' : esc(pcText('3D PREVIEW OFF'))) + '</span>';
-    if (api) api.hide({ id: "wbPreview" });
+    if (raw) raw.hide({ id: "wbPreview" });
     _wbBenchShown = null;
     return;
   }
@@ -231,7 +241,7 @@ function bindWbScroll(){
 }
 
 function hideWbBenchPreview(){
-  const api = modelPreview(); if (api) api.hide({ id: "wbPreview" });
+  const api = previewApi(); if (api) api.hide({ id: "wbPreview" });
   _wbBenchShown = null;
 }
 

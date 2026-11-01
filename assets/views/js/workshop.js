@@ -95,10 +95,11 @@ function toggleFav(r) {
     if (r.legacyFirst !== false) favs.delete(String(r.formRef));
     if (!owned) favs.add(k);
     saveFavs(); renderFavCount();
-    if (favView) { requestCatalogPage(catalogPage); return; }
+    if (favView) { requestCatalogPage(catalogPage); return !owned; }
     const i = currentView().findIndex(x => keyOf(x) === k);
     const star = document.querySelectorAll('#strip .card')[i]?.querySelector('.fav');
     if (star) star.classList.toggle('on', favs.has(k));
+    return !owned;
 }
 function renderFavCount() {
     const c = document.getElementById('fav-count'); if (c) c.textContent = String(favs.size);
@@ -184,6 +185,7 @@ function commitBuildables(data) {
     }
     pendingNavigationEnd = false;
     console.log(`[WS] workshop page ${catalogPage + 1}/${catalogPageCount}: ${allItems.length} items`);
+    if (typeof workshopFocusRing === 'function' && workshopRingShown) workshopFocusRing();
 }
 window.beginBuildables = arg => {
     let meta;
@@ -261,14 +263,7 @@ window.setPlacingMode = flag => {
     }
     if (selectedItem) showLivePreview(selectedItem);
 };
-window.updatePlayerResources = arg => {
-    try {
-        const raw = (typeof arg === 'string') ? JSON.parse(arg) : (arg || {});
-        playerResources = {};
-        for (const k in raw) if (Object.prototype.hasOwnProperty.call(raw, k)) playerResources[k.toLowerCase()] = raw[k];
-        if (selectedItem) refreshMaterials(selectedItem);
-    } catch (e) {}
-};
+
 
 let _statsPoll = 0;
 let _statsPollTimer = 0;
@@ -381,8 +376,10 @@ function actScrap() {
     if (typeof window.prisma_scrap === 'function') window.prisma_scrap('');
 }
 
-function actTag() {
-    if (selectedItem && typeof window.prisma_tag === 'function') window.prisma_tag(String(selectedItem.formRef));
+function actTag(desired) {
+    if (!selectedItem || typeof window.prisma_tag !== 'function') return;
+    const state = desired === true ? ',1' : desired === false ? ',0' : '';
+    window.prisma_tag(String(selectedItem["form" + "Id"]) + state);
 }
 function closeHelper() {
 
@@ -391,11 +388,12 @@ function closeHelper() {
     if (typeof window.prisma_close === 'function') window.prisma_close('');
 }
 
+let _searchTimer = null;
 document.getElementById('q').addEventListener('input', e => {
     currentSearch = e.target.value;
     document.querySelector('.search')?.classList.toggle('has', !!currentSearch);
-    resetCatalogNavigation();
-    requestCatalogPage(0);
+    clearTimeout(_searchTimer);
+    _searchTimer = setTimeout(() => { resetCatalogNavigation(); requestCatalogPage(0); }, 180);
 });
 
 (() => {
@@ -490,7 +488,6 @@ window.setFreeState = arg => {
         }
     }
     function ready() {
-        try { if (window.prisma_loaded) window.prisma_loaded(''); } catch (e) {}
         ensureDockOnScreen();
         reportPanelRects();
     }

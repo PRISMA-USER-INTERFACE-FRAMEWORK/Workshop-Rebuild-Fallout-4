@@ -11,10 +11,25 @@ crafting menus with a web rendered interface. It runs on the PrismaUI framework 
 - Live in engine 3D item previews, with baked flat icons as a fallback.
 - Workbench upgrade tiers with material and cap costs and build timers.
 - Locked recipes show the real perks and tools the game asks for, read straight from the recipe
-  records. An INI switch can open every bench if you would rather skip the tier system.
+  records. An INI switch (or the in-game UNLOCK ALL toggle) can open every bench if you would rather skip the tier system.
 - A settlement build helper that keeps build mode fully interactive and uses the game's own ghost
   placement.
 - Full controller navigation through the PrismaUI controller actions.
+
+## Settings
+
+All player settings live in `Documents\My Games\Fallout4\F4SE\PrismaCrafting.ini`. The plugin creates
+the file on first launch, so it is not in the mod folder and it is safe with MO2. Edit it while the
+game is closed, or use the in-game toggles.
+
+- **UNLOCK ALL** (crafting page header, or `[Workbench] UnlockAllBenches=1`): skips workbench tier
+  gating only. Recipe perk, material and condition requirements still apply.
+- **3D PREVIEWS** (crafting page header, or `[UI] ModelPreviews=0`): turns the live in-engine item
+  previews off. Use this if previews stutter or freeze.
+- **CHEAT MODE** and `AllowCheatMode`: the crafting page toggle and its `[Gameplay]` kill switch. Off
+  by default.
+
+Both header toggles write back to the ini immediately.
 
 ## Building
 
@@ -25,7 +40,7 @@ next to this repo, then run:
 xmake
 ```
 
-The target is Fallout 4 1.10.163 (the pre Next Gen runtime). The build produces PrismaCrafting.dll.
+The plugin targets Fallout 4 1.10.163 (OG) and the Anniversary Edition runtimes the loader accepts (1.11.191, 1.11.221, 1.11.240). NG 1.10.980-1.10.984 is rejected at plugin query. The build produces PrismaCrafting.dll.
 See [DEPENDENCIES.md](DEPENDENCIES.md) for the framework and CommonLibF4 versions.
 
 ## Layout

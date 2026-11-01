@@ -1,4 +1,3 @@
-// Constraint: moved native bindings must match source:src/main.cpp at 5fc7723.
 #include "RuntimeInternal.h"
 #include <cstring>
 #include <limits>
@@ -80,40 +79,74 @@ void PushWorkshopStats()
 }
 
 static const char* volatile g_catalogStage = "idle";
-static volatile unsigned long g_catalogFaultCode = 0;
 static const void* volatile g_syncNode = nullptr;
 static const char* volatile g_syncStep = "start";
-static bool SyncWorkshopCategoriesGuarded(unsigned long& code);
+struct CategoryScan
+{
+    std::unordered_map<std::uint32_t, std::string> categories;
+    std::size_t namelessNodes = 0;
+    std::size_t duplicateRecipes = 0;
+    bool faulted = false;
+};
+static constexpr std::uint32_t kNoCategoryParent = 0xFFFFFFFFu;
+static constexpr std::size_t kMaxRawCategoryNodes = 2048;
+struct RawCategoryNode
+{
+    std::uintptr_t node = 0;
+    std::uint32_t parent = kNoCategoryParent;
+};
+struct RawCategoryScan
+{
+    RawCategoryNode nodes[kMaxRawCategoryNodes];
+    std::size_t count = 0;
+    bool faulted = false;
+};
+struct RawNodeFields
+{
+    std::uintptr_t filterKeyword = 0;
+    std::uint32_t  recipeFormId = 0;
+    std::uint32_t  keywordFormId = 0;
+    char           keywordName[96] = {};
+    std::size_t    childCount = 0;
+    bool           ok = false;
+};
+static unsigned long ScanWorkshopCategoriesGuarded(RawCategoryScan& a_out);
+static unsigned long ReadRawNodeFieldsGuarded(std::uintptr_t a_node, RawNodeFields& a_out);
+static void ResolveWorkshopCategories(const RawCategoryScan& a_raw, CategoryScan& a_out);
+
 static std::mutex g_workshopPageLock;
 static CobjCache::WorkshopPageRequest g_workshopPageRequest;
 static std::uint32_t g_workshopPageSession = 0;
 static std::uint32_t g_workshopPageRequestId = 0;
 static std::uint64_t g_workshopPageSerial = 0;
 
-static bool PushHelperDataUnguarded(bool refreshCategories = true)
+// Constraint: this path owns locks and containers, so no SEH frame may enclose it (/EHsc skips their unwinding).
+static bool PushHelperDataNow(const CobjCache::WorkshopPageRequest& request, std::uint32_t requestId,
+    bool refreshCategories)
 {
     const auto session = g_wsSession.load(std::memory_order_acquire);
     const auto view = g_helperView.load();
     if (!WorkshopSessionActive(session) || !g_api || !g_api->IsValid(view)) return false;
-    CobjCache::WorkshopPageRequest request;
-    std::uint32_t requestId = 0;
-    {
-        std::lock_guard lock(g_workshopPageLock);
-        if (g_workshopPageSession == session) {
-            request = g_workshopPageRequest;
-            requestId = g_workshopPageRequestId;
-        }
-    }
     if (refreshCategories) {
         g_catalogStage = "CobjCache::Build";
         CobjCache::Build();
-        g_catalogStage = "SyncWorkshopCategories";
+        g_catalogStage = "ScanWorkshopCategories";
         g_syncNode = nullptr;
         g_syncStep = "start";
-        if (unsigned long code = 0; !SyncWorkshopCategoriesGuarded(code))
+        RawCategoryScan raw;
+        if (const unsigned long code = ScanWorkshopCategoriesGuarded(raw)) {
             logger::error("PrismaCrafting: workshop menu tree faulted (code {:08X}) at node {} step '{}'; "
                           "continuing with recipe-derived categories",
                           code, static_cast<const void*>(g_syncNode), static_cast<const char*>(g_syncStep));
+        } else {
+            CategoryScan scan;
+            ResolveWorkshopCategories(raw, scan);
+            if (scan.faulted) {
+                logger::error("PrismaCrafting: workshop category resolve faulted; continuing with recipe-derived categories");
+            } else {
+                CobjCache::ApplyWorkshopCategories(scan.categories);
+            }
+        }
     }
     g_catalogStage = "GetWorkshopSourceRefs";
     const auto sources = GetWorkshopSourceRefs();
@@ -146,40 +179,34 @@ static bool PushHelperDataUnguarded(bool refreshCategories = true)
     return true;
 }
 
-static int CatalogFaultFilter(unsigned long code)
-{
-    g_catalogFaultCode = code;
-    return EXCEPTION_EXECUTE_HANDLER;
-}
-
-// SEH frames must not require C++ object unwinding.
-static bool PushHelperDataGuarded(bool& faulted, bool refreshCategories)
-{
-    __try {
-        return PushHelperDataUnguarded(refreshCategories);
-    } __except (CatalogFaultFilter(GetExceptionCode())) {
-        faulted = true;
-        return false;
-    }
-}
-
+// Constraint: the request is copied under the page lock here, before the unguarded push takes any lock.
 static bool PushWorkshopPage(bool refreshCategories)
 {
     const auto session = g_wsSession.load(std::memory_order_acquire);
-    bool faulted = false;
-    const bool ok = PushHelperDataGuarded(faulted, refreshCategories);
-    if (faulted) {
-        logger::error("PrismaCrafting: workshop catalog push faulted in {} (code {:08X}); restoring the vanilla workshop UI",
-                      static_cast<const char*>(g_catalogStage), static_cast<unsigned long>(g_catalogFaultCode));
-        g_catalogStage = "idle";
-        AbortWorkshopReplacement("catalog push faulted", session);
+    CobjCache::WorkshopPageRequest request;
+    std::uint32_t requestId = 0;
+    {
+        std::lock_guard lock(g_workshopPageLock);
+        if (g_workshopPageSession == session) {
+            request = g_workshopPageRequest;
+            requestId = g_workshopPageRequestId;
+        }
     }
-    return ok;
+    return PushHelperDataNow(request, requestId, refreshCategories);
 }
 
 bool PushHelperData()
 {
     return PushWorkshopPage(true);
+}
+
+static std::string TruncateUtf8(std::string value, std::size_t maxBytes)
+{
+    if (value.size() <= maxBytes) return value;
+    std::size_t end = maxBytes;
+    while (end > 0 && (static_cast<unsigned char>(value[end]) & 0xC0) == 0x80) --end;
+    value.resize(end);
+    return value;
 }
 
 void RequestWorkshopPage(const char* arg)
@@ -214,19 +241,25 @@ void RequestWorkshopPage(const char* arg)
     const auto requestId = json["requestId"].get<std::uint32_t>();
     if (requestSession != session || requestId == 0) return;
     CobjCache::WorkshopPageRequest request;
-    request.search = json["search"].get<std::string>();
-    request.category = json["category"].get<std::string>();
-    request.sub = json["sub"].get<std::string>();
+    request.search = TruncateUtf8(json["search"].get<std::string>(), 512);
+    request.category = TruncateUtf8(json["category"].get<std::string>(), 512);
+    request.sub = TruncateUtf8(json["sub"].get<std::string>(), 512);
     request.filter = json["filter"].get<std::string>();
     request.page = json["page"].get<int>();
     request.pageSize = json["pageSize"].get<int>();
     request.favoritesOnly = json["favoritesOnly"].get<bool>();
-    if (request.search.size() > 512 || request.category.size() > 512 || request.sub.size() > 512 ||
-        (request.filter != "ALL" && request.filter != "BUILDABLE" && request.filter != "LOCKED") ||
-        json["favorites"].size() > 8192) return;
+    bool requestValid = (request.filter == "ALL" || request.filter == "BUILDABLE" || request.filter == "LOCKED") &&
+        json["favorites"].size() <= 8192;
     for (const auto& key : json["favorites"]) {
-        if (!key.is_string() || key.get_ref<const std::string&>().size() > 512) return;
+        if (!key.is_string() || key.get_ref<const std::string&>().size() > 512) {
+            requestValid = false;
+            break;
+        }
         request.favorites.push_back(key.get<std::string>());
+    }
+    if (!requestValid) {
+        request = {};
+        request.favoritesOnly = true;
     }
     {
         std::lock_guard lock(g_workshopPageLock);
@@ -238,88 +271,119 @@ void RequestWorkshopPage(const char* arg)
     PushWorkshopPage(false);
 }
 
-static void SyncWorkshopCategories()
+// Constraint: only raw node/child pointer reads may run inside the SEH frame.
+static void FillRawCategories(RawCategoryScan& a_out)
 {
     if (!crafting::ids::WorkshopDataResolvable()) return;
     auto* root = WSExt::RootNode();
     if (!root) return;
-
-    std::unordered_map<std::uint32_t, std::string> categories;
-
-    auto keywordName = [](RE::BGSKeyword* kw) -> std::string {
-        if (!kw) return {};
-        if (auto sv = RE::TESFullName::GetFullName(*kw); !sv.empty()) return std::string(sv);
-        const char* eid = kw->GetFormEditorID();
-        return (eid && eid[0]) ? eid : std::string{};
-    };
-
-    std::size_t namelessNodes = 0;
-    std::size_t duplicateRecipes = 0;
-
-    struct Frame { RE::Workshop::WorkshopMenuNode* node; std::string path; };
-    std::vector<Frame> stack{ { root, std::string{} } };
-    while (!stack.empty()) {
-        auto [node, path] = std::move(stack.back());
-        stack.pop_back();
+    a_out.nodes[0] = RawCategoryNode{ reinterpret_cast<std::uintptr_t>(root), kNoCategoryParent };
+    a_out.count = 1;
+    for (std::size_t i = 0; i < a_out.count; ++i) {
+        g_syncNode = reinterpret_cast<const void*>(a_out.nodes[i].node);
+        auto* node = reinterpret_cast<RE::Workshop::WorkshopMenuNode*>(a_out.nodes[i].node);
         if (!node) continue;
-        g_syncNode = node;
+        g_syncStep = "children";
+        for (std::uint32_t child = 0; child < node->children.size(); ++child) {
+            auto* next = node->children[child].get();
+            if (!next) continue;
+            if (a_out.count >= kMaxRawCategoryNodes) {
+                g_syncStep = "overflow";
+                a_out.faulted = true;
+                return;
+            }
+            a_out.nodes[a_out.count++] = RawCategoryNode{ reinterpret_cast<std::uintptr_t>(next),
+                static_cast<std::uint32_t>(i) };
+        }
+    }
+}
 
-        std::string here = path;
-        if (node != root) {
-            g_syncStep = "filterKeyword";
-            if (auto name = keywordName(node->filterKeyword); !name.empty()) {
-                here = here.empty() ? name : here + " > " + name;
+// SEH frames must not require C++ object unwinding; this frame only writes into the caller's POD arrays.
+static unsigned long ScanWorkshopCategoriesGuarded(RawCategoryScan& a_out)
+{
+    unsigned long code = 0;
+    __try {
+        FillRawCategories(a_out);
+    } __except (code = GetExceptionCode(), EXCEPTION_EXECUTE_HANDLER) {
+        a_out.faulted = true;
+    }
+    if (a_out.faulted) return code ? code : 0xE0000001UL;
+    return 0;
+}
+
+// Constraint: only pointer reads run inside this SEH frame; the resolver consumes the copied POD fields.
+static unsigned long ReadRawNodeFieldsGuarded(std::uintptr_t a_node, RawNodeFields& a_out)
+{
+    unsigned long code = 0;
+    __try {
+        auto* node = reinterpret_cast<RE::Workshop::WorkshopMenuNode*>(a_node);
+        a_out.filterKeyword = node->filterKeyword ? reinterpret_cast<std::uintptr_t>(node->filterKeyword) : 0;
+        a_out.recipeFormId = node->recipe ? node->recipe->GetFormID() : 0;
+        a_out.childCount = node->children.size();
+        if (auto* keyword = node->filterKeyword) {
+            a_out.keywordFormId = keyword->GetFormID();
+            if (const char* name = keyword->GetFullName(); name) {
+                std::strncpy(a_out.keywordName, name, sizeof(a_out.keywordName) - 1);
+            }
+        }
+        a_out.ok = true;
+    } __except (code = GetExceptionCode(), EXCEPTION_EXECUTE_HANDLER) {
+        a_out.ok = false;
+    }
+    return a_out.ok ? 0 : (code ? code : 0xE0000002UL);
+}
+
+static void ResolveWorkshopCategories(const RawCategoryScan& a_raw, CategoryScan& a_out)
+{
+    std::vector<std::string> paths(a_raw.count);
+    for (std::size_t i = 0; i < a_raw.count; ++i) {
+        RawNodeFields fields;
+        if (ReadRawNodeFieldsGuarded(a_raw.nodes[i].node, fields) != 0 || !fields.ok) {
+            a_out.faulted = true;
+            logger::error("PrismaCrafting: workshop category node {:X} became unreadable while resolving",
+                          a_raw.nodes[i].node);
+            continue;
+        }
+        std::string here;
+        if (const std::uint32_t parent = a_raw.nodes[i].parent; parent < paths.size()) here = paths[parent];
+        if (i != 0) {
+            g_syncStep = "filterKeywordName";
+            if (fields.keywordName[0]) {
+                here = here.empty() ? std::string(fields.keywordName) : here + " > " + fields.keywordName;
             } else {
-                ++namelessNodes;
+                ++a_out.namelessNodes;
                 DLOG(Recipes, "category node under '{}' has no usable name (keyword={:08X}) -- "
                               "its {} child node(s) collapse into the parent level",
-                     here.empty() ? "<root>" : here,
-                     node->filterKeyword ? node->filterKeyword->GetFormID() : 0u,
-                     node->children.size());
+                     here.empty() ? "<root>" : here, fields.keywordFormId, fields.childCount);
             }
         }
+        paths[i] = here;
 
         g_syncStep = "recipe";
-        if (node->recipe && !here.empty()) {
-            auto [it, inserted] = categories.emplace(node->recipe->GetFormID(), here);
+        if (fields.recipeFormId && !here.empty()) {
+            auto [it, inserted] = a_out.categories.emplace(fields.recipeFormId, here);
             if (!inserted && it->second != here) {
-                ++duplicateRecipes;
+                ++a_out.duplicateRecipes;
                 DLOG(Recipes, "recipe {:08X} appears at both '{}' and '{}' -- keeping '{}'",
-                     node->recipe->GetFormID(), it->second, here, it->second);
+                     fields.recipeFormId, it->second, here, it->second);
             }
         }
-
-        g_syncStep = "children";
-        for (auto& child : node->children)
-            if (child) stack.push_back({ child.get(), here });
     }
     g_syncStep = "apply";
 
-    if (namelessNodes || duplicateRecipes)
+    if (a_out.namelessNodes || a_out.duplicateRecipes)
         logger::info("PrismaCrafting: workshop category tree: {} nameless node(s) collapsed a level, "
                      "{} recipe(s) reachable by more than one path",
-                     namelessNodes, duplicateRecipes);
+                     a_out.namelessNodes, a_out.duplicateRecipes);
 
     if (crafting::dbg::On(crafting::dbg::Cat::Recipes)) {
         std::map<std::string, std::size_t> perPath;
-        for (const auto& entry : categories) ++perPath[entry.second];
+        for (const auto& entry : a_out.categories) ++perPath[entry.second];
         DLOG(Recipes, "workshop category tree resolved to {} distinct path(s):", perPath.size());
         for (const auto& [p, n] : perPath) DLOG(Recipes, "    {:>4} x  {}", n, p);
     }
-
-    CobjCache::ApplyWorkshopCategories(categories);
 }
 
-// SEH frames must not require C++ object unwinding.
-static bool SyncWorkshopCategoriesGuarded(unsigned long& code)
-{
-    __try {
-        SyncWorkshopCategories();
-        return true;
-    } __except (code = GetExceptionCode(), EXCEPTION_EXECUTE_HANDLER) {
-        return false;
-    }
-}
 static std::atomic<std::uint32_t> g_refreshQueued{ 0 };
 static constexpr auto kInitialCatalogTimeout = std::chrono::seconds(4);
 static std::atomic<std::uint32_t> g_initialCatalogSession{ 0 };
@@ -363,7 +427,7 @@ bool WorkshopCatalogDelivered()
     return session != 0 && g_catalogDeliveredSession.load(std::memory_order_acquire) == session;
 }
 
-static bool WorkshopTransferScreenUp()
+bool WorkshopTransferScreenUp()
 {
     auto* ui = RE::UI::GetSingleton();
     if (!ui) return false;
@@ -468,6 +532,7 @@ void TickInitialWorkshopCatalog()
     }
 }
 
+// Constraint: every destroyed ref funnels through g_refreshQueued, so a burst queues at most one PushHelperData.
 void QueueHelperRefresh()
 {
     const auto session = g_wsSession.load(std::memory_order_acquire);

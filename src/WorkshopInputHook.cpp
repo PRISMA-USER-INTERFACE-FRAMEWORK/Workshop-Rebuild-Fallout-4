@@ -40,6 +40,7 @@ namespace WorkshopInputHook
     static std::atomic<std::uint64_t>   s_focusGeneration{ 0 };
     static std::atomic<bool>            s_insHeld{ false };
     static std::atomic<bool>            s_typing{ false };
+    static std::atomic<bool>            s_textFocusRequested{ false };
 
     static bool ApiOk() { return s_api && *s_api && s_view && (*s_api)->IsValid(s_view->load()); }
 
@@ -310,7 +311,8 @@ namespace WorkshopInputHook
                 const bool altHeld = (uMsg == WM_SYSKEYDOWN || uMsg == WM_SYSKEYUP) &&
                                      (lParam & (1 << 29));
 
-                if (!altHeld && !s_typing.load() &&
+                const bool typing = s_typing.load() && PanelFocusedNow();
+                if (!altHeld && !typing &&
                     WorkshopFreedom::OwnsKey(static_cast<std::uint16_t>(wParam)))
                     return Swallow("WorkshopFreedom owns this key", vk, up);
             }
@@ -338,18 +340,19 @@ namespace WorkshopInputHook
                         !(up && IsMovementKey(vk)))
                         return Swallow("panel key during focus transition", vk, up);
 
-                    if (up && s_typing.load()) {
+                    const bool typing = s_typing.load() && PanelFocusedNow();
+                    if (up && typing) {
                         (void)WorkshopFreedom::HandleKey(vk, true);
                         if (vk == kToggleKey) s_insHeld.store(false);
                     }
-                    if (s_typing.load() && vk != VK_ESCAPE)
+                    if (typing && vk != VK_ESCAPE)
                         return Swallow("key while typing in the search box", vk, up);
-                    if (!s_typing.load() && WorkshopFreedom::HandleKey(vk, up))
+                    if (!typing && WorkshopFreedom::HandleKey(vk, up))
                         return Swallow("WorkshopFreedom handled it", vk, up);
 
                     if (vk == kToggleKey) {
 
-                        if (s_typing.load()) return Swallow("cursor toggle while typing", vk, up);
+                        if (typing) return Swallow("cursor toggle while typing", vk, up);
                         if (!up) {
                             if (!s_insHeld.exchange(true)) QueueToggleCursor();
                         } else {
@@ -481,8 +484,11 @@ namespace WorkshopInputHook
 
     void SetTextFocus(bool typing)
     {
-        const bool was = s_typing.exchange(typing);
-        if (was != typing) DLOG(Input, "text focus {} -> {}", was, typing);
+        // Constraint: remember the raw request so a focus event that arrives before SetActive(true) is replayed, not lost.
+        s_textFocusRequested.store(typing, std::memory_order_release);
+        const bool now = typing && s_active.load();
+        const bool was = s_typing.exchange(now);
+        if (was != now) DLOG(Input, "text focus {} -> {}", was, now);
     }
 
     void SetActive(bool active)
@@ -493,6 +499,7 @@ namespace WorkshopInputHook
         if (active) {
             (void)WorkshopPlacementInput::BindPlaceEvent();
             WorkshopControllerInput::Activate();
+            SetTextFocus(s_textFocusRequested.load(std::memory_order_acquire));
             if (!wasActive) ArmPlacementKeyReleaseGate();
 
             if (wasActive && s_restoreAfterPlacement.load(std::memory_order_acquire)) {
@@ -517,7 +524,13 @@ namespace WorkshopInputHook
             logger::error("WorkshopInputHook: deactivation left helper focused; native hook remains active");
         s_insHeld = false;
         s_typing  = false;
+        s_textFocusRequested.store(false, std::memory_order_release);
     }
+
+bool IsTyping()
+{
+    return s_typing.load(std::memory_order_acquire) && PanelFocusedNow();
+}
 
     void OnPlacementEnded(bool active)
     {
@@ -545,4 +558,5 @@ namespace WorkshopInputHook
     }
 
     bool IsFocused() { return PanelFocusedNow(); }
+    bool IsActive() { return s_active.load(std::memory_order_acquire); }
 }

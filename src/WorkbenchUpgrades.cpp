@@ -47,7 +47,7 @@ namespace WorkbenchUpgrades
         std::unordered_map<std::string, std::size_t> s_benchIndex;
         std::unordered_map<std::string, std::string> s_categoryBench;
         bool                                        s_inited = false;
-        bool                                        s_unlockAll = false;
+        std::atomic<bool>                           s_unlockAll{ false };
         std::recursive_mutex                        s_stateLock;
 
         Tiers DefaultTiers(const std::string& id)
@@ -72,8 +72,8 @@ namespace WorkbenchUpgrades
                              rc, rc == SI_FILE ? "file missing or unreadable" : "parse error");
             }
 
-            s_unlockAll = ini.GetBoolValue("Workbench", "UnlockAllBenches", false);
-            DLOG(Bench, "ini: [Workbench]UnlockAllBenches={} (from PrismaCrafting.ini)", s_unlockAll);
+            s_unlockAll.store(ini.GetBoolValue("Workbench", "UnlockAllBenches", false), std::memory_order_release);
+            DLOG(Bench, "ini: [Workbench]UnlockAllBenches={} (from PrismaCrafting.ini)", s_unlockAll.load());
             for (const char* id : { "weapon", "munitions", "armor", "chem", "utility" }) {
 
                 long v = ini.GetLongValue("Workbench", id, 0);
@@ -275,6 +275,7 @@ namespace WorkbenchUpgrades
             for (auto& [id, st] : s_state) {
                 if (st.upgradeCompleteAt == 0) continue;
 
+                // Constraint: a forward wall-clock jump completes this early; monotonic timing needs a co-save format change.
                 if (now >= st.upgradeCompleteAt) {
                     st.level += 1;
                     st.upgradeCompleteAt = 0;
@@ -365,11 +366,13 @@ namespace WorkbenchUpgrades
     {
         const std::string bench = BenchForCategory(category);
         if (bench.empty()) return true;
-        if (s_unlockAll) return true;
+        if (s_unlockAll.load(std::memory_order_acquire)) return true;
         return PlayerLevel(bench) >= RequiredLevel(category, createdValue);
     }
 
-    bool UnlockAllBenches() { return s_unlockAll; }
+    bool UnlockAllBenches() { return s_unlockAll.load(std::memory_order_acquire); }
+
+    void SetUnlockAll(bool a_unlock) { s_unlockAll.store(a_unlock, std::memory_order_release); }
 
     std::string LockReason(const std::string& category, int createdValue)
     {

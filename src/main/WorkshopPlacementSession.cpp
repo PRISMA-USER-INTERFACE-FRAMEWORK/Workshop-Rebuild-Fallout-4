@@ -23,6 +23,7 @@ static std::mutex g_placementOwnerLock;
 static std::uint64_t g_ownedPlacementSession = 0;
 static std::shared_ptr<PlacementOwner> g_pendingPlacementOwner;
 static std::shared_ptr<PlacementOwner> g_armedPlacementOwner;
+static std::atomic<bool> g_placementGateApproved{ true };
 
 bool WorkshopSessionActive(std::uint32_t session)
 {
@@ -37,6 +38,13 @@ static bool PlacementOwnerCurrent(const std::shared_ptr<PlacementOwner>& owner)
     return owner->session != 0 && g_ownedPlacementSession == owner->session;
 }
 
+bool PlacementInFlight()
+{
+    if (g_placing.load(std::memory_order_acquire)) return true;
+    std::lock_guard<std::mutex> lock(g_placementOwnerLock);
+    return g_pendingPlacementOwner != nullptr || g_armedPlacementOwner != nullptr;
+}
+
 void ResetPlacementOwnership()
 {
     std::lock_guard<std::mutex> lock(g_placementOwnerLock);
@@ -47,6 +55,8 @@ void ResetPlacementOwnership()
     g_pendingPlacementOwner.reset();
     g_armedPlacementOwner.reset();
     g_placing.store(false, std::memory_order_release);
+    g_placingFormId.store(0);
+    g_placingRecipeId.store(0);
 }
 
 void RetirePlacementOwnership()
@@ -176,6 +186,10 @@ void SpawnAndPublish(std::uint32_t recipeFormId, std::uint32_t createdFormId, st
         PublishPlacementResult(ok, owner);
     })) {
         logger::error("PrismaCrafting: placement result was not queued (dispatch unavailable)");
+        if (!PrismaCraftingThreading::IsGameThread()) {
+            logger::critical("PrismaCrafting: placement result could not be published off the game thread; restoring input through the deferred workshop tick");
+            RequestWorkshopInputRestore();
+        }
         if (ok) {
             std::lock_guard<std::mutex> lock(g_placementOwnerLock);
             if (owner->phase != PlacementPhase::Armed || g_armedPlacementOwner != owner ||
@@ -188,7 +202,7 @@ void SpawnAndPublish(std::uint32_t recipeFormId, std::uint32_t createdFormId, st
                 if (PrismaCraftingThreading::IsGameThread())
                     WorkshopInputHook::OnPlacementEnded(g_open.load());
                 else
-                    logger::critical("PrismaCrafting: placement rollback left workshop input unchanged because game-thread ownership was unavailable");
+                    RequestWorkshopInputRestore();
             }
             logger::critical("PrismaCrafting: placement rolled back because completion notification was rejected");
         } else {
@@ -196,7 +210,7 @@ void SpawnAndPublish(std::uint32_t recipeFormId, std::uint32_t createdFormId, st
                 if (PrismaCraftingThreading::IsGameThread())
                     WorkshopInputHook::OnPlacementEnded(g_open.load());
                 else
-                    logger::critical("PrismaCrafting: failed placement left workshop input unchanged because game-thread ownership was unavailable");
+                    RequestWorkshopInputRestore();
             }
         }
     }
@@ -355,17 +369,32 @@ static bool SettleOriginalPlacement(const PlacementOwner& owner, bool dryRun)
 
 bool OnGhostCommitted(RE::TESObjectREFR* placed)
 {
-    std::shared_ptr<PlacementOwner> owner;
+    // Constraint: the owner lock must not be held across engine IsWorkshopItem or handle.get() calls.
+    RE::ObjectRefHandle expectedHandle;
     {
         std::lock_guard<std::mutex> lock(g_placementOwnerLock);
         if (!g_armedPlacementOwner || g_armedPlacementOwner->phase != PlacementPhase::Armed) return false;
-        const auto expected = g_armedPlacementOwner->ghost.get();
-        if (!expected || (placed && placed != expected.get())) return false;
-        if (!placed && !RE::Workshop::IsWorkshopItem(*expected)) return false;
-        if (!g_placing.exchange(false) && (!placed || g_ghostBusy.load())) return false;
+        expectedHandle = g_armedPlacementOwner->ghost;
+    }
+    auto expected = expectedHandle.get();
+    if (!expected || (placed && placed != expected.get())) return false;
+    if (!placed && !RE::Workshop::IsWorkshopItem(*expected)) return false;
+    const bool wasPlacing = g_placing.exchange(false);
+    if (!wasPlacing && (!placed || g_ghostBusy.load())) {
+        // Constraint: never invent a placing state here; the ghost was already gone before this event.
+        return false;
+    }
+    std::shared_ptr<PlacementOwner> owner;
+    {
+        std::lock_guard<std::mutex> lock(g_placementOwnerLock);
+        if (!g_armedPlacementOwner || g_armedPlacementOwner->ghost != expectedHandle ||
+            g_armedPlacementOwner->phase != PlacementPhase::Armed) {
+            return false;
+        }
         owner = std::move(g_armedPlacementOwner);
         owner->phase = PlacementPhase::SettlementPending;
         owner->payment = PlacementPayment::Pending;
+        g_placementGateApproved.store(true, std::memory_order_release);
         g_lastPlacedRef.Store(owner->ghost);
         if (g_ghostRef.Load() == owner->ghost) g_ghostRef.Store({});
     }
@@ -378,10 +407,16 @@ bool OnGhostCommitted(RE::TESObjectREFR* placed)
             owner->phase = PlacementPhase::Settling;
         }
         bool paid = false;
-        try {
-            paid = SettleOriginalPlacement(*owner, false);
-        } catch (...) {
-            logger::error("PrismaCrafting: payment threw during settlement");
+        if (!g_placementGateApproved.load(std::memory_order_acquire)) {
+            // Constraint: our FreeBuild detour did not approve the commit, so the engine's own gate may have charged.
+            logger::warn("PrismaCrafting: engine gate ran for COBJ {:08X}; skipping our payment to avoid a double charge", owner->recipeId);
+            paid = true;
+        } else {
+            try {
+                paid = SettleOriginalPlacement(*owner, false);
+            } catch (...) {
+                logger::error("PrismaCrafting: payment threw during settlement");
+            }
         }
         {
             std::lock_guard<std::mutex> lock(g_placementOwnerLock);
@@ -389,8 +424,14 @@ bool OnGhostCommitted(RE::TESObjectREFR* placed)
             owner->phase = PlacementPhase::Ended;
         }
         if (!paid) {
-            logger::error("PrismaCrafting: placed object {:08X} from COBJ {:08X}, but exact payment failed; ending placement session",
+            logger::error("PrismaCrafting: placed object {:08X} from COBJ {:08X}, but exact payment failed; deleting it and ending placement session",
                           owner->objectId, owner->recipeId);
+            if (auto placed = owner->ghost.get(); placed) {
+                // Constraint: DeleteWorkshopItem may refund components; disable/delete the unpaid ref without a scrap refund.
+                logger::warn("PrismaCrafting: [PLACE-ROLLBACK] disabling unpaid placed object {:08X}", placed->GetFormID());
+                placed->Disable();
+                placed->SetDelete(true);
+            }
             if (!EndOwnedPlacement(owner)) return;
             WorkshopInputHook::OnPlacementEnded(g_open);
             if (g_api && g_api->IsValid(g_helperView)) {
@@ -442,11 +483,11 @@ bool OnGhostCommitted(RE::TESObjectREFR* placed)
         }
         logger::error("PrismaCrafting: cannot settle placement payment -- dispatch unavailable; ending session");
         if (EndOwnedPlacement(owner)) {
-            if (PrismaCraftingThreading::IsGameThread())
+            if (PrismaCraftingThreading::IsGameThread()) {
                 WorkshopInputHook::OnPlacementEnded(g_open.load());
-            else
-                logger::critical(
-                    "PrismaCrafting: payment-settle failure left workshop input unchanged because V11 game-thread ownership was unavailable");
+            } else {
+                RequestWorkshopInputRestore();
+            }
         }
     }
     return true;
@@ -485,7 +526,46 @@ static bool PluginOwnsActivePlacement()
     const bool owns = engineRef && ourRef && engineRef.get() == ourRef.get();
     logger::info("PrismaCrafting: [FREEBUILD] owner query {} -- engine placement item {:08X}, tracked ghost {:08X}",
                  owns, engineRef ? engineRef->GetFormID() : 0, ourRef ? ourRef->GetFormID() : 0);
-    return owns;
+    if (!owns) return false;
+
+    if (!PrismaCraftingThreading::IsGameThread()) {
+        // Constraint: never walk inventories off the game thread; approve now and let the game-thread settlement decide.
+        g_placementGateApproved.store(true, std::memory_order_release);
+        logger::info("PrismaCrafting: [FREEBUILD] owner query deferred the price walk to game-thread settlement");
+        return true;
+    }
+    std::vector<std::pair<RE::TESForm*, std::uint32_t>> costs;
+    std::vector<RE::ObjectRefHandle> sourceHandles;
+    const auto armed = g_armedPlacementOwner;
+    if (!armed || armed->phase != PlacementPhase::Armed) return false;
+    costs = armed->costs;
+    sourceHandles = armed->sources;
+    auto* player = RE::PlayerCharacter::GetSingleton();
+    if (!player) return false;
+    std::vector<RE::NiPointer<RE::TESObjectREFR>> pinned;
+    std::vector<RE::TESObjectREFR*> sources;
+    for (const auto& handle : sourceHandles) {
+        auto ref = handle.get();
+        if (!ref) {
+            logger::warn("PrismaCrafting: [FREEBUILD] owner query false -- a payment source was unloaded");
+            return false;
+        }
+        sources.push_back(ref.get());
+        pinned.push_back(std::move(ref));
+    }
+    bool affordable = false;
+    try {
+        affordable = CobjCache::ConsumeComponents(costs, player, sources, true);
+    } catch (...) {
+        logger::error("PrismaCrafting: [FREEBUILD] owner query price check threw");
+        return false;
+    }
+    g_placementGateApproved.store(affordable, std::memory_order_release);
+    if (!affordable) {
+        logger::info("PrismaCrafting: [FREEBUILD] owner query false -- the player can no longer afford the ghost");
+        return false;
+    }
+    return true;
 }
 
 void RegisterWorkshopPlacedSink()

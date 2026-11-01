@@ -12,7 +12,6 @@
 
 namespace CobjCache
 {
-    // Constraint: category matching preserves source:src/CobjCache.cpp at 3f158d1.
     uint32_t FirstWorkshopBuildableCreatedId()
     {
         std::lock_guard<std::recursive_mutex> lock(s_cacheLock);

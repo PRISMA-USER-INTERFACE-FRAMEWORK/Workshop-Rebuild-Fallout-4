@@ -202,6 +202,11 @@ static void CollectPerkReqs(const RE::TESCondition& cond, std::vector<PerkReq>& 
     {
         static constexpr const char* ops[] = { "==", "!=", ">", ">=", "<", "<=" };
         auto* player = RE::PlayerCharacter::GetSingleton();
+        if (!player) {
+            static bool warned = false;
+            if (!warned) { warned = true; logger::warn("CobjCacheScanner: no player during requirement scan; skill/perk requirements left unclassified"); }
+            return;
+        }
         bool prevOr = false;
         for (auto* item = cond.head; item; item = item->next) {
             const bool inOrRun = prevOr || item->data.compareOr;
@@ -209,7 +214,8 @@ static void CollectPerkReqs(const RE::TESCondition& cond, std::vector<PerkReq>& 
             if (item->data.functionData.function.underlying() !=
                 static_cast<uint16_t>(RE::SCRIPT_OUTPUT::kScript_HasPerk))
                 continue;
-            if (inOrRun || item->data.valueIsGlobal || item->data.aliasParams || item->data.packDataParams) continue;
+            if (inOrRun || item->data.valueIsGlobal || item->data.aliasParams || item->data.packDataParams ||
+                item->data.swapsSubjectAndTarget) continue;
             auto* perk = static_cast<RE::BGSPerk*>(item->data.functionData.param[0]);
             if (!perk) continue;
             const auto object = item->data.object.get();
@@ -246,6 +252,11 @@ static void CollectToolReqs(const RE::TESCondition& cond, std::vector<ToolGroup>
     {
         static constexpr const char* ops[] = { "==", "!=", ">", ">=", "<", "<=" };
         auto* player = RE::PlayerCharacter::GetSingleton();
+        if (!player) {
+            static bool warned = false;
+            if (!warned) { warned = true; logger::warn("CobjCacheScanner: no player during requirement scan; tool requirements left unclassified"); }
+            return;
+        }
         std::vector<std::vector<ToolOption>> groups;
         std::vector<ToolOption> group;
         std::set<uint32_t>      groupSeen;
@@ -259,9 +270,11 @@ static void CollectToolReqs(const RE::TESCondition& cond, std::vector<ToolGroup>
             const uint16_t fn = item->data.functionData.function.underlying();
             auto* form = static_cast<RE::TESForm*>(item->data.functionData.param[0]);
 
+            // Constraint: a GetItemCount condition is a tool badge only when the counted form is actually a tool.
             bool known = fn == static_cast<uint16_t>(RE::SCRIPT_OUTPUT::kScript_GetItemCount) && form &&
+                         IsToolForm(form) &&
                          !item->data.valueIsGlobal && !item->data.aliasParams && !item->data.packDataParams &&
-                         item->data.condition <= 5;
+                         !item->data.swapsSubjectAndTarget && item->data.condition <= 5;
             if (known) {
                 const auto object = item->data.object.get();
                 if (object == RE::CONDITIONITEMOBJECT::kRef) {
@@ -322,11 +335,19 @@ static void CollectToolReqs(const RE::TESCondition& cond, std::vector<ToolGroup>
             if (ov->hasComponents && ov->componentsValid) {
                 std::vector<Component> rebuilt;
                 rebuilt.reserve(ov->components.size());
+                std::set<RE::TESForm*> forms;
                 bool resolved = true;
                 for (const auto& cs : ov->components) {
                     auto* form = CraftingConfig::ResolveForm(cs.id);
                     if (!form) {
                         logger::warn("CraftingConfig: recipe '{}' component '{}' unresolved -- keeping vanilla costs",
+                            r.editorId.empty() ? r.createdKey : r.editorId, cs.id);
+                        ++skipped;
+                        resolved = false;
+                        break;
+                    }
+                    if (!forms.insert(form).second) {
+                        logger::warn("CraftingConfig: recipe '{}' component '{}' duplicates another component -- keeping vanilla costs",
                             r.editorId.empty() ? r.createdKey : r.editorId, cs.id);
                         ++skipped;
                         resolved = false;
@@ -378,6 +399,7 @@ static void CollectToolReqs(const RE::TESCondition& cond, std::vector<ToolGroup>
     {
         CraftingConfig::Load();
         RecipeScan scan;
+        scan.playerMissing = RE::PlayerCharacter::GetSingleton() == nullptr;
         scan.recipes.reserve(objects.size());
         scan.forms.reserve(objects.size());
 
@@ -677,6 +699,7 @@ static void CollectToolReqs(const RE::TESCondition& cond, std::vector<ToolGroup>
             if (r.sortKey.empty()) r.sortKey = LowerStr(CleanToolName(r.editorId));
             if (r.sortKey.empty()) r.sortKey = r.nameKey;
             r.category = Categorize(r.formType, r.nameKey, r.subCategory, ConsumableCategory(created), MappedCategory(r, created));
+            std::replace(r.nameKey.begin(), r.nameKey.end(), '_', ' ');
 
             r.compScore = ComputeRecipeScore(r);
 
@@ -688,6 +711,7 @@ static void CollectToolReqs(const RE::TESCondition& cond, std::vector<ToolGroup>
                         if (std::find(r.workshopVariants.begin(), r.workshopVariants.end(), member) == r.workshopVariants.end())
                             r.workshopVariants.push_back(member);
                     }
+                    if (r.workshopVariants.empty()) r.workshopList = false;
                 }
             }
 

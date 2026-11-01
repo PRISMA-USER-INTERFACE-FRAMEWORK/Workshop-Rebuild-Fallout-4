@@ -11,6 +11,7 @@
 #include <fstream>
 #include <limits>
 #include <mutex>
+#include <set>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -34,6 +35,26 @@ namespace CraftingConfig
         return s;
     }
 
+    // Constraint: keys normalize to (lowercased plugin | unpadded uppercase hex), a lowercased editor id, or an 8-hex runtime form id.
+    static std::string NormalizeKey(const std::string& key)
+    {
+        const auto bar = key.find('|');
+        if (bar != std::string::npos) {
+            uint32_t local = 0;
+            if (!Validation::ParseHex(key.substr(bar + 1), local)) return ToLower(key);
+            char hex[16];
+            std::snprintf(hex, sizeof(hex), "%X", local);
+            return ToLower(key.substr(0, bar)) + "|" + hex;
+        }
+        uint32_t rawId = 0;
+        if (Validation::ParseHex(key, rawId)) {
+            char hex[16];
+            std::snprintf(hex, sizeof(hex), "%08X", rawId);
+            return hex;
+        }
+        return ToLower(key);
+    }
+
     static RecipeOverride ParseOverride(const json& v, const std::string& key)
     {
         RecipeOverride ov;
@@ -43,6 +64,7 @@ namespace CraftingConfig
                 ov.componentsValid = false;
                 logger::warn("CraftingConfig: '{}' components must be an array -- keeping vanilla costs", key);
             } else {
+                std::set<std::string> seenIds;
                 for (const auto& c : *it) {
                     CompSpec cs;
                     if (!c.is_object() || !c.contains("id") || !c["id"].is_string() ||
@@ -59,7 +81,7 @@ namespace CraftingConfig
                         if (signedCount > 0) count = static_cast<std::uint64_t>(signedCount);
                     }
                     if (cs.id.empty() || count == 0 ||
-                        count > std::numeric_limits<std::uint32_t>::max()) {
+                        count > std::numeric_limits<std::uint32_t>::max() || !seenIds.insert(cs.id).second) {
                         ov.componentsValid = false;
                         continue;
                     }
@@ -108,31 +130,44 @@ namespace CraftingConfig
 
     static void LoadCategoryRules(const json& value)
     {
+        if (!value.is_array()) {
+            logger::warn("CraftingConfig: invalid _classification -- keeping default classification");
+            return;
+        }
         std::vector<CategoryRule> candidate;
         std::unordered_set<std::string> seen;
-        bool valid = value.is_array();
-        if (valid) for (const auto& entry : value) {
-            if (!entry.is_object() || entry.size() != 2 || !entry.contains("category") ||
-                !entry["category"].is_string() || entry.contains("editorId") == entry.contains("keyword")) {
-                valid = false;
-                break;
+        std::size_t skipped = 0;
+        for (const auto& entry : value) {
+            const bool hasEditorId = entry.is_object() && entry.contains("editorId");
+            const bool hasKeyword = entry.is_object() && entry.contains("keyword");
+            if (!entry.is_object() || !entry.contains("category") || !entry["category"].is_string() ||
+                hasEditorId == hasKeyword) {
+                ++skipped;
+                continue;
             }
             CategoryRule rule;
-            rule.keyword = entry.contains("keyword");
+            rule.keyword = hasKeyword;
             const auto& id = entry[rule.keyword ? "keyword" : "editorId"];
-            if (!id.is_string()) { valid = false; break; }
+            if (!id.is_string()) {
+                ++skipped;
+                continue;
+            }
             rule.id = id.get<std::string>();
             rule.category = entry["category"].get<std::string>();
             if (rule.id.find_first_not_of(" \t\r\n") == std::string::npos ||
                 rule.id.find('\0') != std::string::npos || !Validation::IsRecipeCategory(rule.category) ||
                 !seen.insert((rule.keyword ? "keyword:" : "editorId:") + rule.id).second) {
-                valid = false;
-                break;
+                ++skipped;
+                continue;
             }
             candidate.push_back(std::move(rule));
         }
-        if (valid) s_categoryRules = std::move(candidate);
-        else logger::warn("CraftingConfig: invalid _classification -- keeping default classification");
+        if (candidate.empty()) {
+            if (skipped) logger::warn("CraftingConfig: invalid _classification -- keeping default classification");
+            return;
+        }
+        s_categoryRules = std::move(candidate);
+        if (skipped) logger::warn("CraftingConfig: skipped {} invalid _classification rule(s)", skipped);
     }
 
     std::span<const CategoryRule> CategoryRules() { return s_categoryRules; }
@@ -164,12 +199,20 @@ namespace CraftingConfig
         if (auto it = root.find("_classification"); it != root.end()) LoadCategoryRules(*it);
         for (auto it = root.begin(); it != root.end(); ++it) {
             if (it.key() == "_classification") continue;
-            if (!it.value().is_object()) continue;
-            auto ov = ParseOverride(it.value(), it.key());
+            if (!it.key().empty() && it.key()[0] == '_') continue;
+            const auto key = NormalizeKey(it.key());
+            if (!it.value().is_object()) {
+                logger::warn("CraftingConfig: '{}' is not an object -- ignoring", key);
+                continue;
+            }
+            auto ov = ParseOverride(it.value(), key);
             if (ov.hasComponents || ov.hasConditions) {
                 logger::debug("CraftingConfig: override '{}' (components={} [{}], conditions={} [{}])",
-                    it.key(), ov.hasComponents, ov.components.size(), ov.hasConditions, ov.conditions.size());
-                s_overrides.emplace(it.key(), std::move(ov));
+                    key, ov.hasComponents, ov.components.size(), ov.hasConditions, ov.conditions.size());
+                if (!s_overrides.emplace(key, std::move(ov)).second)
+                    logger::warn("CraftingConfig: duplicate override key '{}' -- keeping the first entry", key);
+            } else {
+                logger::warn("CraftingConfig: '{}' has neither components nor conditions -- ignoring", key);
             }
         }
         logger::info("CraftingConfig: loaded {} recipe override(s)", s_overrides.size());
@@ -181,13 +224,14 @@ namespace CraftingConfig
     {
         if (s_overrides.empty()) return nullptr;
         if (!createdKey.empty()) {
-            if (auto it = s_overrides.find(createdKey); it != s_overrides.end()) {
+            if (auto it = s_overrides.find(NormalizeKey(createdKey)); it != s_overrides.end()) {
                 logger::debug("CraftingConfig: matched override by createdKey '{}'", createdKey);
                 return &it->second;
             }
         }
         if (!editorId.empty()) {
-            if (auto it = s_overrides.find(editorId); it != s_overrides.end()) {
+            const auto editorKey = NormalizeKey(editorId);
+            if (auto it = s_overrides.find(editorKey); it != s_overrides.end()) {
                 logger::debug("CraftingConfig: matched override by editorId '{}'", editorId);
                 return &it->second;
             }

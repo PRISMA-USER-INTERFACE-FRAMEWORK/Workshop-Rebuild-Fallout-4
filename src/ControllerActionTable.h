@@ -78,4 +78,22 @@ namespace ControllerActionTable
         { "A", "Enter", "Craft", "" },
         { "B", "Esc", "Back", "" },
     };
+
+    inline constexpr Binding kWeaponBenchBindings[] = {
+        { "DUp", "nav.up", Unfocused::No },
+        { "DDown", "nav.down", Unfocused::No },
+        { "DLeft", "nav.left", Unfocused::No },
+        { "DRight", "nav.right", Unfocused::No },
+        { "A", "bench.confirm", Unfocused::No },
+        { "B", "bench.back", Unfocused::No },
+        { "LB", "bench.slot_prev", Unfocused::No },
+        { "RB", "bench.slot_next", Unfocused::No },
+    };
+
+    inline constexpr Prompt kWeaponBenchPrompts[] = {
+        { "DUp/DDown/DLeft/DRight", "Arrows", "Navigate", "" },
+        { "A", "Enter", "Select", "" },
+        { "B", "Esc", "Back", "" },
+        { "LB/RB", "Left/Right", "Slot", "" },
+    };
 }

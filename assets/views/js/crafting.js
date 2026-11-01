@@ -2,14 +2,36 @@ function imeFocus(el){
   try{ if(window.__prismaImeFocusNotify) window.__prismaImeFocusNotify(el); }catch(e){}
 }
 
-let cheatMode = false, cheatAck = false;
+let cheatMode = false, cheatAck = false, cheatAllowed = true;
 function toggleCheat() {
+  if (!cheatAllowed) return;
   if (!cheatMode && !cheatAck) {
     document.getElementById("cheatModal").style.display = "flex";
     pushPreviewOverlay();
     return;
   }
   setCheat(!cheatMode);
+}
+window.setCheatAllowed = (v) => { cheatAllowed = v === '1' || v === 1 || v === true; const b = document.getElementById('cheatBtn'); if (b && !cheatAllowed) { b.hidden = true; if (cheatMode) setCheat(false); } };
+window.setCheatState = (v) => {
+  cheatMode = v === '1' || v === 1 || v === true;
+  cheatAck = false;
+  const b = document.getElementById('cheatBtn');
+  if (b) { pcSetText(b, cheatMode ? 'CHEAT MODE: ON' : 'CHEAT MODE: OFF'); b.classList.toggle('on', cheatMode); }
+  renderGrid(); renderDetail();
+};
+window.setModelPreviews = (v) => {
+  const on = !(v === '0' || v === 0 || v === false);
+  window.__pcModelPreviews = on;
+  const b = document.getElementById("previewBtn");
+  if (b) pcSetText(b, on ? "3D PREVIEWS: ON" : "3D PREVIEWS: OFF");
+  if (!on) { hideCardPreviews(); hideLivePreview(); if (typeof hideWbBenchPreview === "function") hideWbBenchPreview(); }
+  else { syncCardPreviews(); if (selected >= 0 && filtered[selected]) showLivePreview(filtered[selected]); }
+};
+function toggleModelPreviews(){
+  const next = !(window.__pcModelPreviews !== false);
+  window.setModelPreviews(next ? "1" : "0");
+  if (window.saveModelPreviews) window.saveModelPreviews(next ? "1" : "0");
 }
 function setCheat(on) {
   cheatMode = on;
@@ -36,6 +58,7 @@ let qtyForFid = null;
 let benchIsReady = false;
 let _pageSession = "", _pageRequestId = 0, _pagePayload = "", _pageTimer = null;
 let _lastPageEpoch = 0;
+let _pageLoading = false;
 
 const PAGE_SIZE = 60;
 let page = 0;
@@ -62,6 +85,7 @@ function loadPage(reset){
   _pageRequestId++;
   if (reset) { page = 0; selected = -1; }
   filtered = []; selected = -1;
+  serverTotal = 0; serverPageCount = 1; _pageLoading = true;
   renderGrid(); renderDetail();
   pcSetText(document.getElementById("readyCount"), "CHECKING RECIPES…");
   _pagePayload = buildQuery();
@@ -88,6 +112,7 @@ function setPage(arg){
   filtered        = d.recipes || [];
   serverTotal     = d.total || 0;
   serverPageCount = Math.max(1, d.pageCount || 1);
+  _pageLoading    = false;
   page            = d.page || 0;
   serverCats      = d.categories || [];
   selected = -1;
@@ -110,9 +135,10 @@ function setPage(arg){
 window.setPage = setPage;
 
 function setPostCraft(fid){
+  const made = parseInt(String(fid).split(',')[1], 10);
 
   if (_pendingCraft && parseInt(fid, 16) === parseInt(_pendingCraft.formRef, 16)) {
-    _postCraftRestore = _pendingCraft;
+    if (made > 0) _postCraftRestore = _pendingCraft;
     _pendingCraft = null;
   }
 }
@@ -123,6 +149,7 @@ function benchReady(session){
   if (!/^[0-9A-F]{8}$/.test(session) || parseInt(session, 16) <= _lastPageEpoch) return;
   _lastPageEpoch = parseInt(session, 16);
   _pageSession = session;
+  _pendingCraft = null;
   benchIsReady = false;
   if (document.body.classList.contains("workbench-mode")) closeWorkbenches();
   if (document.getElementById("cheatModal").style.display === "flex") cancelCheat();
@@ -139,6 +166,20 @@ function benchReady(session){
   }
 }
 window.benchReady = benchReady;
+function setPageEpoch(session){
+  session = String(session || "");
+  if (!/^[0-9A-F]{8}$/.test(session)) return false;
+  const epoch = parseInt(session, 16);
+  if (epoch <= _lastPageEpoch) return false;
+  _lastPageEpoch = epoch;
+  _pageSession = session;
+  return true;
+}
+window.setPageEpoch = setPageEpoch;
+window.refreshPage = () => {
+  if (selected >= 0 && filtered[selected]) _reselectFormId = filtered[selected]["form" + "Id"];
+  loadPage(false);
+};
 
 function setDesc(arg) {
   if (!arg) return;
@@ -174,7 +215,7 @@ function populateTabs() {
   });
 
   if (activeTab !== "ALL" && !counts[activeTab] && !filterText && lockFilter === "ALL") { activeTab = "ALL"; activeSub = "ALL"; }
-  if (activeSub !== "ALL" && !(subs[activeTab] || []).some((s) => s.sub === activeSub)) activeSub = "ALL";
+  if (activeSub !== "ALL" && !filterText && !(subs[activeTab] || []).some((s) => s.sub === activeSub)) activeSub = "ALL";
 
   const ordered = CATEGORY_ORDER.filter((c) => counts[c]);
   Object.keys(counts).filter((c) => !CATEGORY_ORDER.includes(c))
@@ -356,7 +397,7 @@ function renderGrid() {
   hideCardPreviews();
   grid.scrollTop = 0;
   if (!filtered.length) {
-    grid.innerHTML = `<div class="empty-d" style="grid-column:1/-1;height:120px">${esc(pcText("NO SECTOR ENTRIES REGISTERED"))}</div>`;
+    grid.innerHTML = `<div class="empty-d" style="grid-column:1/-1;height:120px">${esc(pcText(_pageLoading ? "CHECKING RECIPES…" : "NO SECTOR ENTRIES REGISTERED"))}</div>`;
     renderPager();
     return;
   }
@@ -590,23 +631,27 @@ function bumpQty(d) {
   setQty(craftQty);
 }
 function esc(s) {
-  return String(s == null ? "" : s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  return String(s == null ? "" : s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
 }
 function craft() {
+  if (_pendingCraft) return;
   if (selected < 0 || selected >= filtered.length) return;
   const r = filtered[selected];
   if (canCraft(r) !== true) return;
   const qty = Math.max(1, Math.min(craftQty, maxCraftable(r)));
-  _pendingCraft = { ["form" + "Id"]: r["form" + "Id"], page: page, name: r.name };
+  _pendingCraft = { ["form" + "Id"]: r["form" + "Id"], page: page, name: displayName(r) };
   if (window.prisma_craft) window.prisma_craft(r.formRef + "," + qty);
 }
 function closeMenu() {
+  if (typeof _wbCompleteTimer !== "undefined") { clearTimeout(_wbCompleteTimer); _wbCompleteTimer = null; }
   clearTimeout(_pageTimer);
+  _pendingCraft = null;
+  _postCraftRestore = null;
   _pageSession = ""; benchIsReady = false;
   if (window.prisma_close) window.prisma_close("");
 }
 
-let _fsPct = 125;
+let _fsPct = 100;
 
 let _fsSettle = [];
 function _fsResync(){
@@ -615,7 +660,7 @@ function _fsResync(){
   _fsSettle = [120, 300].map((ms) => setTimeout(resyncPreviews, ms));
 }
 function fsApply(pct, noPersist){
-  pct = Math.max(80, Math.min(200, parseInt(pct, 10) || 125));
+  pct = Math.max(50, Math.min(200, parseInt(pct, 10) || 100));
   _fsPct = pct;
 
   document.documentElement.style.setProperty("--ui-user", String(pct / 100));
@@ -658,13 +703,13 @@ window.setPrompts = function (json) {
   }).join("");
 };
 
-fsApply(125, true);
+fsApply(100, true);
 
 (function fireWhenReady(){
   function fire(n){
     n = n || 0;
     if (window.prisma_loaded) { try { window.prisma_loaded(""); } catch (e) {} return; }
-    if (n < 100) setTimeout(() => { fire(n + 1); }, 50);
+    setTimeout(() => { fire(n + 1); }, n < 100 ? 50 : 500);
   }
   if (document.readyState === "complete") setTimeout(fire, 30);
   else window.addEventListener("load", () => { setTimeout(fire, 30); });

@@ -70,6 +70,33 @@ static bool SaveSettingsIni(const CSimpleIniA& ini, bool existing)
     std::filesystem::remove(temp, ec);
     return false;
 }
+bool LoadModelPreviews()
+{
+    std::lock_guard<std::mutex> lock(g_settingsLock);
+    CSimpleIniA ini;
+    ini.SetUnicode();
+    ini.LoadFile(SettingsIniPath().c_str());
+    return ini.GetBoolValue("UI", "ModelPreviews", true);
+}
+void SaveUnlockAllBenches(bool enabled)
+{
+    std::lock_guard<std::mutex> lock(g_settingsLock);
+    CSimpleIniA ini;
+    bool existing = false;
+    if (!LoadSettingsIni(ini, existing) ||
+        ini.SetLongValue("Workbench", "UnlockAllBenches", enabled ? 1 : 0) < 0 || !SaveSettingsIni(ini, existing))
+        logger::warn("PrismaCrafting: failed to write [Workbench]UnlockAllBenches to PrismaCrafting.ini");
+}
+void SaveModelPreviews(bool enabled)
+{
+    std::lock_guard<std::mutex> lock(g_settingsLock);
+    CSimpleIniA ini;
+    bool existing = false;
+    if (!LoadSettingsIni(ini, existing) ||
+        ini.SetLongValue("UI", "ModelPreviews", enabled ? 1 : 0) < 0 || !SaveSettingsIni(ini, existing))
+        logger::warn("PrismaCrafting: failed to write [UI]ModelPreviews to PrismaCrafting.ini");
+}
+
 int LoadScale(const char* key)
 {
     std::lock_guard<std::mutex> lock(g_settingsLock);
@@ -98,6 +125,33 @@ bool LoadInterceptFurnitureSwapperBenches()
     return ini.GetBoolValue("Compat", "InterceptFurnitureSwapperBenches", false);
 }
 
+bool LoadAllowCheatMode()
+{
+    std::lock_guard<std::mutex> lock(g_settingsLock);
+    CSimpleIniA ini;
+    ini.SetUnicode();
+    ini.LoadFile(SettingsIniPath().c_str());
+    return ini.GetBoolValue("Gameplay", "AllowCheatMode", false);
+}
+
+bool LoadNativeWeaponBench()
+{
+    std::lock_guard<std::mutex> lock(g_settingsLock);
+    CSimpleIniA ini;
+    ini.SetUnicode();
+    ini.LoadFile(SettingsIniPath().c_str());
+    return ini.GetBoolValue("Experimental", "NativeWeaponBench", false);
+}
+
+bool LoadWeaponBenchDev()
+{
+    std::lock_guard<std::mutex> lock(g_settingsLock);
+    CSimpleIniA ini;
+    ini.SetUnicode();
+    ini.LoadFile(SettingsIniPath().c_str());
+    return ini.GetBoolValue("Debug", "WeaponBenchDev", false);
+}
+
 std::string LoadTheme()
 {
     std::lock_guard<std::mutex> lock(g_settingsLock);
@@ -106,12 +160,22 @@ std::string LoadTheme()
     ini.LoadFile(SettingsIniPath().c_str());
     return ini.GetValue("UI", "Theme", "tarkov");
 }
+[[nodiscard]] static std::string SanitizeTheme(const char* a_name)
+{
+    const std::string_view value = a_name ? std::string_view(a_name) : std::string_view{};
+    if (value == "tarkov" || value == "pipboy") return std::string(value);
+    logger::warn("PrismaCrafting: rejected invalid theme name ({} bytes); keeping the saved theme", value.size());
+    return {};
+}
+
 void SaveTheme(const char* name)
 {
     std::lock_guard<std::mutex> lock(g_settingsLock);
     CSimpleIniA ini;
     bool existing = false;
-    if (!LoadSettingsIni(ini, existing) || ini.SetValue("UI", "Theme", (name && name[0]) ? name : "tarkov") < 0 ||
+    const auto theme = SanitizeTheme(name);
+    if (theme.empty()) return;
+    if (!LoadSettingsIni(ini, existing) || ini.SetValue("UI", "Theme", theme.c_str()) < 0 ||
         !SaveSettingsIni(ini, existing))
         logger::warn("PrismaCrafting: failed to write Theme to PrismaCrafting.ini");
 }

@@ -36,4 +36,6 @@ Zero duration completes through the existing upgrade polling. Zero caps and an e
 
 Materials must also pass the existing form resolver's retention policy. References returning an identifier in its excluded `FF` prefix range reject the complete file. Use plugin/local-ID references for materials: workbench initialization precedes recipe scanning, so component EditorID registration is unavailable on the first initialization.
 
-INI starting levels, tier thresholds and `UnlockAllBenches` remain in `PrismaCrafting.ini`. Saved bench levels and the co-save format retain their existing identities. Changing categories changes which bench gates those recipes. Changing durations can affect clock recovery for an upgrade already in progress; test changes on a separate save before applying them to an ongoing playthrough.
+INI starting levels, tier thresholds and `UnlockAllBenches` remain in `PrismaCrafting.ini`.
+The crafting page's **UNLOCK ALL** toggle flips `UnlockAllBenches` live and writes it back, so editing
+the ini by hand is optional; it only skips the tier gate, not recipe perk/material conditions. Saved bench levels and the co-save format retain their existing identities. Changing categories changes which bench gates those recipes. Changing durations can affect clock recovery for an upgrade already in progress; test changes on a separate save before applying them to an ongoing playthrough.

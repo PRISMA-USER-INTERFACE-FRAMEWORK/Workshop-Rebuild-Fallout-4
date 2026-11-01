@@ -1,4 +1,4 @@
-let wbData = null, wbSel = null, wbPushClient = 0, wbTimer = null, _wbAwaitingRefresh = false;
+let wbData = null, wbSel = null, wbPushClient = 0, wbTimer = null, _wbAwaitingRefresh = false, _wbCompleteTimer = null;
 let _wbBenchShown = null;
 function wbEsc(s){ return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
 
@@ -20,9 +20,25 @@ function setWorkbenches(arg){
   if (wbData?.benches?.length){
     if (!wbSel || !wbData.benches.some((b) => b.id===wbSel)) wbSel = wbData.benches[0].id;
   }
+  if (Number.isFinite(wbData?.caps) && typeof setCaps === 'function') setCaps(wbData.caps);
   if (document.body.classList.contains("workbench-mode")) renderWorkbenches();
+  wbArmCompletion();
 }
 window.setWorkbenches = setWorkbenches;
+
+function wbArmCompletion(){
+  clearTimeout(_wbCompleteTimer);
+  const pending = (wbData?.benches || []).filter((b) => b.upgrading);
+  if (!pending.length) return;
+  const soonest = Math.min(...pending.map((b) => b.completeAt || 0));
+  _wbCompleteTimer = setTimeout(() => {
+    _wbCompleteTimer = null;
+    if (!document.body.classList.contains("workbench-mode")) {
+      if (selected >= 0 && filtered[selected]) _reselectFormId = filtered[selected]["form" + "Id"];
+      loadPage(false);
+    }
+  }, Math.max(0, (soonest - wbServerNow()) * 1000));
+}
 
 let _lampCtx = null, _lampAnalyser = null, _lampData = null, _lampRaf = 0, _lampLevel = 0.5;
 
@@ -87,8 +103,15 @@ function setUnlockAll(v){
   benchesUnlocked = (v === "1" || v === 1 || v === true);
   const b = document.getElementById("stationsBtn");
   if (b) b.style.display = benchesUnlocked ? "none" : "";
+  const u = document.getElementById("unlockAllBtn");
+  if (u) pcSetText(u, benchesUnlocked ? "UNLOCK ALL: ON" : "UNLOCK ALL: OFF");
 }
 window.setUnlockAll = setUnlockAll;
+function toggleUnlockAll(){
+  const next = !benchesUnlocked;
+  setUnlockAll(next ? "1" : "0");
+  if (window.saveUnlockAll) window.saveUnlockAll(next ? "1" : "0");
+}
 
 function openWorkbenches(){
   if (benchesUnlocked || document.body.classList.contains("workbench-mode")) return;

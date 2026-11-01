@@ -8,9 +8,9 @@ first.
 
 | Dependency | Version this build targets | Required |
 |---|---|---|
-| Fallout 4 | 1.10.163 (Old-Gen) | yes |
+| Fallout 4 | 1.10.163 (OG), or the Anniversary Edition runtimes the loader accepts (1.11.191, 1.11.221, 1.11.240); NG 1.10.980-1.10.984 is rejected at plugin query | yes |
 | F4SE | matching the game runtime | yes |
-| F4SE version database (Address Lib) | 1.10.163 database | yes — engine functions are bound by their version-database ID, not raw offsets |
+| F4SE version database (Address Lib) | the database matching the game runtime | yes — engine functions are bound by their version-database ID, not raw offsets |
 | PrismaUI_F4 framework | PrismaUI 2.2.0+ runtime; 2.1.1 public API headers | yes |
 | Ultralight (shipped inside PrismaUI_F4) | staged by the framework | yes, via the framework |
 
@@ -104,3 +104,9 @@ Both pages also load the framework's shared `prisma_controller_glyphs.css` and
 the glyph stylesheet is linked from both pages and why `workshop.css` sizes the shared `.cg-img`
 art: the plugin ships no controller art of its own, and the framework's copy is what makes a prompt
 render at the right size instead of as full-size artwork.
+
+## Pinned packages
+
+`xmake.lua` pins every `add_requires` dependency: `spdlog v1.16.0`, `fmt v11.0.2` and
+`nlohmann_json v3.12.0`. A version bump is a deliberate dependency update. The pins are version tags
+only, and the explicit `fmt v11.0.2` pin must follow the fmt version CommonLibF4 supplies.

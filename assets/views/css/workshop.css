@@ -100,16 +100,11 @@ html, body {
 .brand .brand-txt { color: var(--accent); font-size: calc(12px * var(--ui-fs)); font-weight: 700; }
 .brand .brand-sub { color: var(--dim); font-size: calc(10px * var(--ui-fs)); }
 
-/* Arrow + row + arrow. Takes over the flex:1 the row itself used to carry, so the row keeps
-   filling the rail and the arrows sit hard against its two ends. */
 .row-scroll {
     display: flex; align-items: stretch;
     flex: 1; min-width: 0;
 }
 
-/* Hidden rather than disabled when everything already fits: a control that can never do anything
-   is noise, and these rails are narrow. Both are hidden together -- one lone arrow reads as "there
-   is more that way" even when the row is at that end. */
 .row-scroll.fits .row-arrow { display: none; }
 
 .row-arrow {
@@ -118,22 +113,13 @@ html, body {
     width: calc(28px * var(--ui-fs));
     padding: 0; cursor: pointer;
     font-family: inherit; font-size: calc(15px * var(--ui-fs)); font-weight: 700; line-height: 1;
-    /* Amber at rest -- the same highlight the active tab underline uses -- so the arrows are the
-       boldest thing in the rail and cannot be mistaken for a dim category chip, which is what the
-       old faint grey chevrons were missed as. --fill is transparent under the default theme, same
-       as every other rail button (fav/fs/lock), so the arrow matches them; the glyph and the end
-       borders carry the affordance. */
     color: var(--amber); background: var(--fill);
     border: none; border-bottom: 2px solid transparent;
     transition: color 110ms linear, background 110ms linear;
 }
-/* A hairline against the chips so each arrow reads as a button at the row's end rather than as a
-   stray glyph inside the row. prev is the row-scroll's first child, next is its last. */
 .row-scroll > .row-arrow:first-child { border-right: 1px solid var(--border); }
 .row-scroll > .row-arrow:last-child  { border-left:  1px solid var(--border); }
 .row-arrow:hover:not(:disabled) { color: var(--text); background: var(--fill-h); }
-/* Kept in the layout at the ends of travel so the row does not shift sideways by 28px the moment
-   you reach either end. */
 .row-arrow:disabled { color: var(--dim2); opacity: 0.35; cursor: default; }
 
 .cat-row {
@@ -440,18 +426,6 @@ html, body {
 .card .cost.ok    { color: var(--green-l); }
 .card .cost.short { color: var(--red-l); }
 
-/* Resource badges: what placing this gives or costs the settlement.
-   Sits between the name and the cost, so a card reads name -> what it does -> what it costs.
-   Wraps rather than clipping: the rare two-resource item (a powered pump gives Water and takes
-   Power) gets a second line instead of a truncated first one. */
-/* ONE line, never two.
-   .strip is align-items:stretch inside a dock capped at max-height:72vh, so every card in view is
-   as tall as the tallest and the strip cannot grow past that cap -- past it, .strip's
-   overflow-y:hidden absorbs the difference by clipping. A wrapping badge row therefore risked
-   cutting the .cost line off EVERY card in a row because one item happened to carry two
-   resources, trading away the build cost, which matters more. Bounded to a single row so a card
-   gains a fixed, predictable amount; the rare two-resource item shows what fits, and the preview
-   panel carries the full list either way. */
 .card .res {
     display: flex; flex-wrap: nowrap; justify-content: center;
     gap: calc(3px * var(--ui-fs));
@@ -463,7 +437,6 @@ html, body {
     font-size: calc(8.5px * var(--ui-fs)); letter-spacing: 0.04em; white-space: nowrap;
     border: 1px solid transparent;
 }
-/* Green gives, red takes -- the same reading the cost line already trains. */
 .card .res-b.pos { color: var(--green-l); border-color: var(--green); }
 .card .res-b.neg { color: var(--red-l);   border-color: var(--red); }
 

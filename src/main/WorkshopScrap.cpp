@@ -1,4 +1,3 @@
-// Constraint: moved native bindings must match source:src/main.cpp at 5fc7723.
 #include "RuntimeInternal.h"
 #include <nlohmann/json.hpp>
 
@@ -46,9 +45,9 @@ void RunFreedomCommand(std::string_view cmd)
     else if (cmd.size() == 3 && cmd[1] >= '0' && cmd[1] <= '2' && (cmd[2] == '+' || cmd[2] == '-')) {
         const float sign = cmd[2] == '-' ? -1.0f : 1.0f;
         const int axis = cmd[1] - '0';
-        if (cmd[0] == 'r') WorkshopFreedom::NudgeRotate(axis, 15.0f * sign);
-        else if (cmd[0] == 'm') WorkshopFreedom::NudgeMove(axis, 5.0f * sign);
-        else if (cmd[0] == 's') WorkshopFreedom::NudgeScale(0.05f * sign);
+        if (cmd[0] == 'r') WorkshopFreedom::NudgeRotate(axis, WorkshopFreedom::RotateStep() * sign);
+        else if (cmd[0] == 'm') WorkshopFreedom::NudgeMove(axis, WorkshopFreedom::MoveStep() * sign);
+        else if (cmd[0] == 's') WorkshopFreedom::NudgeScale(WorkshopFreedom::ScaleStep() * sign);
     }
 }
 
@@ -76,7 +75,7 @@ void BeginScrapConfirm()
     const auto workshopSession = g_wsSession.load(std::memory_order_acquire);
     if (!WorkshopSessionActive(workshopSession)) return;
     if (!crafting::ids::WorkshopDataResolvable()) return;
-    if (g_placing.load()) return;
+    if (g_placing.load() || g_ghostBusy.load() || g_ghostRef.Load()) return;
     if (!g_api || !g_api->IsValid(g_helperView) || g_api->IsHidden(g_helperView)) return;
 
     if (g_scrapOverlayOpen.load()) {
@@ -174,6 +173,11 @@ void PumpDeferredScrap()
     if (!ni) return;
     auto* player = RE::PlayerCharacter::GetSingleton();
     if (!player || !player->parentCell || owner->player.get().get() != player) return;
+    // Constraint: the ref must be re-validated at the deferred tick; the handle alone only proves it existed at confirm time.
+    if (ni->IsDeleted() || !ni->GetObjectReference() || ni->GetParentCell() != player->parentCell) {
+        logger::warn("PrismaCrafting: [SCRAP] deferred scrap target {:08X} is gone or changed cells -- dropped", ni->GetFormID());
+        return;
+    }
     {
         std::lock_guard<std::mutex> lock(g_scrapOwnerLock);
         if (owner->request != g_scrapRequest || !ScrapOwnerActive(*owner)) return;
@@ -196,9 +200,8 @@ void PumpDeferredScrap()
     static REL::Relocation<RE::ObjectRefHandle*> hCurrentWorkshop{ crafting::ids::CurrentWorkshopHandle };
     const RE::ObjectRefHandle previous = hCurrentWorkshop.get() ? *hCurrentWorkshop : RE::ObjectRefHandle{};
     RE::TESObjectREFR* workshopRef = previous.get() ? previous.get().get() : nullptr;
-    if (!workshopRef)
-        workshopRef = RE::Workshop::FindNearestValidWorkshop(*player);
-    if (workshopRef && hCurrentWorkshop.get())
+    if (!workshopRef) logger::warn("PrismaCrafting: [SCRAP] no current workshop while the deferred scrap refunds -- refunds may be lost");
+    else if (hCurrentWorkshop.get())
         *hCurrentWorkshop = workshopRef->GetHandle();
 
     RE::Workshop::ContextData ctx{ player };
@@ -254,13 +257,15 @@ void TickScrapAfterPlacementCancel()
         ClearScrapAfterPlacementCancel();
 }
 
-void ToggleRecipeTagForSearch(std::uint32_t cobjFormId)
+void ToggleRecipeTagForSearch(std::uint32_t cobjFormId, std::optional<bool> a_desired)
 {
     if (!WorkshopSessionActive(g_wsSession.load(std::memory_order_acquire)) || !crafting::ids::WorkshopDataResolvable()) return;
     auto* fm = RE::FavoritesManager::GetSingleton();
     if (!fm) return;
     auto* cobj = RE::fallout_cast<RE::BGSConstructibleObject*>(RE::TESForm::GetFormByID(cobjFormId));
     if (!cobj) { logger::warn("PrismaCrafting: [TAG] COBJ {:08X} not resolvable", cobjFormId); return; }
+    // Constraint: a desired state only toggles when the engine tag differs, so a favorite and its tag stay in step.
+    if (a_desired && fm->favoriteMods.contains(cobj) == *a_desired) return;
     using Fn = void (*)(RE::FavoritesManager*, RE::BGSConstructibleObject*);
     static REL::Relocation<Fn> toggleModFavorite{ crafting::ids::ToggleModFavorite };
     toggleModFavorite(fm, cobj);
@@ -276,7 +281,7 @@ public:
     {
 
         auto* destroyed = a_event.objectDestroyed.get();
-        logger::warn("PrismaCrafting: [DESTROYED] engine destroyed {} | our ghostRef={} | lastPlaced={} | "
+        logger::debug("PrismaCrafting: [DESTROYED] engine destroyed {} | our ghostRef={} | lastPlaced={} | "
                      "placing={} | ghostBusy={}",
                      DescribeRef(destroyed), DescribeRef(g_ghostRef.Load()), DescribeRef(g_lastPlacedRef.Load()),
                      g_placing.load(), g_ghostBusy.load());

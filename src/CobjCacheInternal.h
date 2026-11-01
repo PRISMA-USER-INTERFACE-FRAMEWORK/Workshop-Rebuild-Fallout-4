@@ -12,8 +12,11 @@ namespace RE { class BGSMaterialSwap; class BGSConstructibleObject; }
 
 namespace CobjCache
 {
+    bool IsToolForm(RE::TESForm* a_form);
+
     using Json = nlohmann::ordered_json;
     bool HasAny(const std::string& hay, std::initializer_list<const char*> needles);
+    bool HasWord(const std::string& hay, std::initializer_list<const char*> needles);
     std::string ConsumableCategory(RE::TESForm* created);
     std::string Categorize(const std::string& formType, const std::string& nameLower,
                           const std::string& subCategory, const std::string& consumableCategory,
@@ -29,6 +32,7 @@ namespace CobjCache
         std::unordered_set<uint32_t> ambiguousWorkshopCreated;
         std::size_t resourceEntries = 0;
         std::size_t resourceMatches = 0;
+        bool playerMissing = false;
     };
     RecipeScan ScanRecipes(std::span<RE::BGSConstructibleObject* const> objects);
     // Constraint: callers hold s_cacheLock; the published index is retained for the session.
@@ -47,6 +51,7 @@ namespace CobjCache
     bool RecipeConditionsPass(const Recipe& r, RE::PlayerCharacter* player,
                                      const std::vector<RE::TESObjectREFR*>& sources);
     bool MatchesCraftBench(const Recipe& r, const std::vector<uint32_t>& wantIds, bool cookingBench);
+    void ResetCraftBenchScopeWarning();
     bool CmpOp(double a, const std::string& op, double b);
     Json ConfigRequirementsJson(const Recipe& r, RE::PlayerCharacter* player,
                                 const std::vector<RE::TESObjectREFR*>& sources);

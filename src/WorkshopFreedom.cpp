@@ -7,6 +7,7 @@
 
 #include "DebugLog.h"
 #include "WorkshopIDs.h"
+#include "WorkshopInputHook.h"
 
 #include "PlaceInRed.h"
 #include "PrismaGameThreadCompat.h"
@@ -26,6 +27,7 @@ namespace WorkshopFreedom
     std::atomic<bool> s_workshopActive{ false };
     std::atomic<bool> s_heldPlace{ false };
     std::atomic<bool> s_heldCam{ false };
+    std::atomic<bool> s_heldSnap{ false };
     namespace
     {
 
@@ -50,13 +52,14 @@ namespace WorkshopFreedom
 
         void RunConsoleCommand(const std::string& cmd)
         {
-            const auto factories = RE::IFormFactory::GetFormFactories();
-            auto* factory = factories[std::to_underlying(RE::ENUM_FORM_ID::kSCPT)];
-            if (!factory) return;
-            auto* script = static_cast<RE::Script*>(factory->DoCreate());
-            if (!script) return;
-            script->SetText(cmd);
-            script->CompileAndRun(nullptr, RE::COMPILER_NAME::kSystemWindow, nullptr);
+            // Constraint: Console::ExecuteCommand has OG and AE ids; CommonLib repeats the last value for the third runtime slot (UNVERIFIED in game).
+            const auto version = REX::FModule::GetExecutingModule().GetFileVersion();
+            if (version != REL::Version{ 1, 10, 163, 0 } && version < REL::Version{ 1, 11, 191, 0 }) {
+                logger::warn("WorkshopFreedom: no verified console entry for runtime {}; skipping '{}'",
+                             version.string(), cmd);
+                return;
+            }
+            RE::Console::ExecuteCommand(cmd.c_str());
             logger::info("WorkshopFreedom: ran console command '{}'", cmd);
         }
 
@@ -97,7 +100,7 @@ namespace WorkshopFreedom
 
                 const bool desiredGroundSnap = s_groundSnapOn.load();
                 PostGameTask("restore-ground-snap", [desiredGroundSnap] {
-                    PlaceInRed::SetGroundSnap(desiredGroundSnap);
+                    if (s_workshopActive.load()) PlaceInRed::SetGroundSnap(desiredGroundSnap);
                 });
                 logger::info("WorkshopFreedom: manual vertical placement cleared for new held object");
             }
@@ -363,7 +366,7 @@ namespace WorkshopFreedom
 
             const float pitch = s_pitch.load(), roll = s_roll.load();
             const bool tilted = pitch != 0.0f || roll != 0.0f;
-            if (!tilted && !s_tiltApplied.load()) { s_workshopUpdateDepth -= 1; return; }
+            if ((!tilted && !s_tiltApplied.load()) || !WorkshopInputHook::HoldingPlacement()) { s_workshopUpdateDepth -= 1; return; }
 
             auto* pd = RE::Workshop::GetCurrentPlacementItemData();
             if (!pd) { s_workshopUpdateDepth -= 1; return; }
@@ -474,6 +477,7 @@ namespace WorkshopFreedom
                 s_freeCam.store(false, std::memory_order_release);
                 s_heldCam.store(false, std::memory_order_release);
                 logger::info("WorkshopFreedom: free camera OFF during workshop teardown");
+                NotifyToggles();
             };
 
             if (PrismaCraftingThreading::IsGameThread()) {
@@ -486,6 +490,8 @@ namespace WorkshopFreedom
         s_workshopActive.store(false, std::memory_order_release);
         s_heldPlace.store(false, std::memory_order_release);
         s_heldCam.store(false, std::memory_order_release);
+        s_heldSnap.store(false, std::memory_order_release);
+        s_tiltApplied.store(false);
         s_heldHandle.store(0);
         const auto restorePlaceInRed = [] {
             if (!PrismaCraftingThreading::IsGameThread()) {
@@ -498,6 +504,7 @@ namespace WorkshopFreedom
             s_objectSnapOn.store(true);
             ResetOffsets();
             s_zResetPending.store(false);
+            NotifyToggles();
         };
         if (PrismaCraftingThreading::IsGameThread()) {
             restorePlaceInRed();
@@ -520,7 +527,7 @@ namespace WorkshopFreedom
 
     void ToggleFreePlace()
     {
-        if (!s_workshopActive.load()) return;
+        if (!s_enabled.load() || !s_workshopActive.load()) return;
         if (!PlaceInRed::Available() || !g_origFreeBuildAtPlaceCurrentReference) {
             Notify("Place in red unavailable (1.10.163 placement/commit hook not armed)");
             logger::error("WorkshopFreedom: F3 refused - placementStatus={} freeBuildHook={}",
@@ -543,7 +550,7 @@ namespace WorkshopFreedom
 
     void ToggleFreeCamera()
     {
-        if (!s_workshopActive.load()) return;
+        if (!s_enabled.load() || !s_workshopActive.load()) return;
         if (!g_origContextDataCtor || !g_origPickContextDataCtor) {
             Notify("Free camera unavailable (1.10.163 targeting hooks not armed)");
             logger::error("WorkshopFreedom: F4 refused - placementCtx={} pickCtx={}",
@@ -569,7 +576,7 @@ namespace WorkshopFreedom
 
     void CycleSnap()
     {
-        if (!s_workshopActive.load()) return;
+        if (!s_enabled.load() || !s_workshopActive.load()) return;
         if (!PlaceInRed::GroundSnapAvailable()) {
             Notify("Free height unavailable (1.10.163 ground-snap sites not armed)");
             return;
@@ -592,7 +599,7 @@ namespace WorkshopFreedom
 
     void ToggleObjectSnap()
     {
-        if (!s_workshopActive.load()) return;
+        if (!s_enabled.load() || !s_workshopActive.load()) return;
         if (!PlaceInRed::ObjectSnapAvailable()) {
             Notify("Object snap unavailable (1.10.163 signature not armed)");
             return;
@@ -610,7 +617,7 @@ namespace WorkshopFreedom
 
     void ResetTransform()
     {
-        if (!s_workshopActive.load()) return;
+        if (!s_enabled.load() || !s_workshopActive.load() || !WorkshopInputHook::HoldingPlacement()) return;
         const bool hadManualZ = s_manualZ.load();
         if (auto* d = RE::Workshop::GetCurrentPlacementItemData())
             if (auto ref = d->placementItem.get()) ref->SetScale(1.0f);
@@ -626,7 +633,7 @@ namespace WorkshopFreedom
 
     void NudgeScale(float delta)
     {
-        if (!s_workshopActive.load()) return;
+        if (!s_enabled.load() || !s_workshopActive.load() || !WorkshopInputHook::HoldingPlacement()) return;
         auto* d = RE::Workshop::GetCurrentPlacementItemData();
         if (!d) return;
         auto ref = d->placementItem.get();
@@ -644,7 +651,7 @@ namespace WorkshopFreedom
 
     void NudgeRotate(int axis, float degrees)
     {
-        if (!s_workshopActive.load()) return;
+        if (!s_enabled.load() || !s_workshopActive.load() || !WorkshopInputHook::HoldingPlacement()) return;
         std::atomic<float>* t = axis == 0 ? &s_yaw : (axis == 1 ? &s_pitch : &s_roll);
         const double current = t->load();
         if (!std::isfinite(current) || !std::isfinite(degrees)) return;
@@ -659,7 +666,7 @@ namespace WorkshopFreedom
 
     void NudgeMove(int axis, float units)
     {
-        if (!s_workshopActive.load() || !std::isfinite(units)) return;
+        if (!s_enabled.load() || !s_workshopActive.load() || !WorkshopInputHook::HoldingPlacement() || !std::isfinite(units)) return;
 
         if (axis == 2) {
             auto* d = RE::Workshop::GetCurrentPlacementItemData();

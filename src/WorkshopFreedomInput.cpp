@@ -9,7 +9,6 @@
 #include <cstdlib>
 #include <limits>
 
-// Constraint: source:src/WorkshopFreedom.cpp at 774f517; preserve input admission and key routing.
 namespace WorkshopFreedom
 {
     namespace
@@ -61,6 +60,7 @@ namespace WorkshopFreedom
             return std::isfinite(value) && std::abs(value) <= std::numeric_limits<float>::max() ?
                 static_cast<float>(value) : fallback;
         }
+        float ClampFloat(float value, float lo, float hi) { return value < lo ? lo : (value > hi ? hi : value); }
         bool ModHeld() { return (GetAsyncKeyState(s_keyMod) & 0x8000) != 0; }
     }
 
@@ -78,14 +78,37 @@ namespace WorkshopFreedom
         s_keyRoll = KeyFromIni(ini, "RollKey", s_keyRoll);
         s_keySnap = KeyFromIni(ini, "SnapCycleKey", s_keySnap);
         s_keyReset = KeyFromIni(ini, "ResetKey", s_keyReset);
-        s_scaleStep = FloatFromIni(ini, "ScaleStep", 0.05f);
-        s_rotStep = FloatFromIni(ini, "RotateStepDegrees", 15.0f);
-        s_moveStep = FloatFromIni(ini, "MoveStepUnits", 5.0f);
-        s_freeCamDistance.store(FloatFromIni(ini, "FreeCameraReachUnits", 0.0f));
+        s_keyFwd = KeyFromIni(ini, "MoveForwardKey", s_keyFwd);
+        s_keyBack = KeyFromIni(ini, "MoveBackKey", s_keyBack);
+        s_keyRight = KeyFromIni(ini, "MoveRightKey", s_keyRight);
+        s_keyLeft = KeyFromIni(ini, "MoveLeftKey", s_keyLeft);
+        s_keyUp = KeyFromIni(ini, "MoveUpKey", s_keyUp);
+        s_keyDown = KeyFromIni(ini, "MoveDownKey", s_keyDown);
+        // Constraint: step sizes are clamped so an ini typo cannot teleport or over-rotate the held object in one press.
+        s_scaleStep = ClampFloat(FloatFromIni(ini, "ScaleStep", 0.05f), 0.001f, 0.5f);
+        s_rotStep = ClampFloat(FloatFromIni(ini, "RotateStepDegrees", 15.0f), 0.5f, 90.0f);
+        s_moveStep = ClampFloat(FloatFromIni(ini, "MoveStepUnits", 5.0f), 0.1f, 50.0f);
+        s_freeCamDistance.store(ClampFloat(FloatFromIni(ini, "FreeCameraReachUnits", 0.0f), 0.0f, 5000.0f));
         s_camFreezeTime.store(ini.GetBoolValue("Workshop", "FreeCameraFreezesTime", false));
-        s_freeCamSpeed.store(FloatFromIni(ini, "FreeCameraSpeed", 10.0f));
+        s_freeCamSpeed.store(ClampFloat(FloatFromIni(ini, "FreeCameraSpeed", 10.0f), 0.1f, 100.0f));
         s_enabled.store(ini.GetBoolValue("Workshop", "Enabled", true));
 
+        struct BoundKey { const char* name; std::uint16_t vk; };
+        const BoundKey keys[] = {
+            { "FreePlaceKey", s_keyFreePlace }, { "FreeCameraKey", s_keyFreeCam },
+            { "ScaleUpKey", s_keyGrow }, { "ScaleDownKey", s_keyShrink },
+            { "YawKey", s_keyYaw }, { "PitchKey", s_keyPitch }, { "RollKey", s_keyRoll },
+            { "SnapCycleKey", s_keySnap }, { "ResetKey", s_keyReset },
+            { "MoveForwardKey", s_keyFwd }, { "MoveBackKey", s_keyBack },
+            { "MoveRightKey", s_keyRight }, { "MoveLeftKey", s_keyLeft },
+            { "MoveUpKey", s_keyUp }, { "MoveDownKey", s_keyDown },
+        };
+        for (std::size_t i = 0; i < std::size(keys); ++i) {
+            if (keys[i].vk == s_keyMod) logger::warn("WorkshopFreedom: {} uses the modifier key VK {:#x}", keys[i].name, keys[i].vk);
+            for (std::size_t j = i + 1; j < std::size(keys); ++j)
+                if (keys[i].vk == keys[j].vk)
+                    logger::warn("WorkshopFreedom: {} and {} both bind VK {:#x}; both actions fire", keys[i].name, keys[j].name, keys[i].vk);
+        }
         if (!s_enabled.load()) logger::warn("WorkshopFreedom: DISABLED via [Workshop]Enabled=0");
         logger::info("WorkshopFreedom: keys place={:#x} cam={:#x} groundSnap={:#x} reset={:#x} "
                      "yaw={:#x} pitch={:#x} roll={:#x}; Shift+groundSnap toggles object snap",
@@ -133,7 +156,8 @@ namespace WorkshopFreedom
             return true;
         }
         if (vk == s_keySnap) {
-            if (!keyUp) {
+            if (keyUp) s_heldSnap.store(false);
+            else if (!s_heldSnap.exchange(true)) {
                 const bool objectSnap = ModHeld();
                 PostGameTask("cycle-snap", [objectSnap] {
                     if (objectSnap) ToggleObjectSnap();
@@ -172,4 +196,9 @@ namespace WorkshopFreedom
         }
         return false;
     }
+
+    float ScaleStep() { return s_scaleStep; }
+    float RotateStep() { return s_rotStep; }
+    float MoveStep() { return s_moveStep; }
+
 }

@@ -15,7 +15,10 @@
 #include "PlacementQueue.h"
 #include "WorkshopJsonChunks.h"
 #include "WorkshopCatalogDeadline.h"
+#include "WeaponBench.h"
+#include "VanillaMenuSuppression.h"
 
+#include <functional>
 #include <map>
 
 #include <psapi.h>
@@ -55,6 +58,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -72,6 +76,12 @@ std::filesystem::path SettingsIniPath();
 int LoadScale(const char* key);
 void SaveScale(const char* key, int pct);
 bool LoadInterceptFurnitureSwapperBenches();
+bool LoadAllowCheatMode();
+bool LoadModelPreviews();
+void SaveUnlockAllBenches(bool enabled);
+void SaveModelPreviews(bool enabled);
+bool LoadNativeWeaponBench();
+bool LoadWeaponBenchDev();
 std::string LoadTheme();
 void SaveTheme(const char* name);
 int ParseIntOr(std::string_view s, int fallback);
@@ -79,7 +89,32 @@ std::uint32_t ParseHexOr(std::string_view s, std::uint32_t fallback);
 bool IsCraftMenu(const RE::BSFixedString& name);
 void MarkViewAsPanel(PrismaView view);
 bool BindGameThreadUIEvent(PrismaView view, const char* functionName,
-                                  PRISMA_UI_API::GameThreadUIEventCallback callback);
+                                  PRISMA_UI_API::GameThreadUIEventCallback callback,
+                                  void* userdata = nullptr);
+template <class F>
+PRISMA_UI_API::JSListenerCallback SafeJSListener(F&& a_callback)
+{
+    static auto callback = std::forward<F>(a_callback);
+    static PRISMA_UI_API::JSListenerCallback thunk = [](const char* a_argument) {
+        try {
+            callback(a_argument);
+        } catch (const std::exception& e) {
+            logger::error("PrismaCrafting: JS listener callback threw: {}", e.what());
+        } catch (...) {
+            logger::error("PrismaCrafting: JS listener callback threw an unknown exception");
+        }
+    };
+    return thunk;
+}
+
+bool BindGameThreadUIEventSafeImpl(PrismaView view, const char* functionName,
+    std::function<void(const char*, void*)> callback, void* userdata);
+template <class F>
+bool BindGameThreadUIEventSafe(PrismaView view, const char* functionName, F&& callback, void* userdata = nullptr)
+{
+    return BindGameThreadUIEventSafeImpl(view, functionName,
+        std::function<void(const char*, void*)>(std::forward<F>(callback)), userdata);
+}
 void SetWorkshopVanillaSuppressed(bool suppressed);
 void AbortWorkshopReplacement(const char* reason, std::uint32_t session);
 bool ServicePendingWorkshopAbort();
@@ -90,6 +125,7 @@ bool WorkshopSessionActive(std::uint32_t session);
 void MarkBenchBypassed(const RE::BSFixedString& a_name);
 bool ConsumeBenchBypass(const RE::BSFixedString& a_name);
 void ClearBenchBypass();
+bool BenchBypassActive();
 PrismaView ActiveView();
 void CreateCraftingView();
 void CreateWorkshopHelperView();
@@ -124,15 +160,20 @@ extern std::atomic<std::uint32_t> g_craftMenuGeneration;
 extern std::atomic<std::uint32_t> g_wsSession;
 extern std::atomic<bool> g_cookingBench;
 extern std::atomic<bool> g_cheatMode;
+extern std::atomic<bool> g_allowCheatMode;
+void ResetCraftCheatMode();
+extern std::atomic<bool> g_modelPreviews;
 extern std::atomic<bool> g_interceptFurnitureSwapperBenches;
 extern std::atomic<bool> g_interceptingSwapperThisOpen;
 extern std::atomic<std::uint32_t> g_interceptingSwapperBenchId;
 extern std::vector<uint32_t> g_benchIds;
 void PushRecipesForCurrentBench();
 void InvalidateCraftPageQuery();
+void RefreshCraftPageAfterUpgrade();
 std::string CraftPageEpoch();
 void RequestCraftingPage(const char* arg);
 void PushControllerPrompts(PrismaView view);
+bool RefreshCraftingSessionBindings(PrismaView view, std::uint32_t generation);
 void SetCraftVanillaSuppressed(bool suppressed);
 bool CraftSessionMatches(std::uint32_t generation);
 bool HasPendingCraftAbort();
@@ -146,14 +187,17 @@ bool PushHelperData();
 void RequestWorkshopPage(const char* arg);
 void ArmInitialWorkshopCatalog(std::uint32_t session);
 bool WorkshopCatalogDelivered();
+bool WorkshopTransferScreenUp();
 void ActivateWorkshopReplacementIfReady(const char* origin);
 void TickInitialWorkshopCatalog();
 void QueueHelperRefresh();
 std::string DescribeRef(RE::TESObjectREFR* a_ref);
 std::string DescribeRef(const RE::ObjectRefHandle& a_handle);
 void DestroyGhostNow();
+void CloseGhostForMenu();
 bool SpawnPlacementGhost(std::uint32_t a_recipeId, std::uint32_t a_createdId);
 void PumpDeferredWorkshopTick();
+void RequestWorkshopInputRestore();
 extern std::atomic<bool> g_placing;
 extern std::atomic<std::uint64_t> g_placementStartQueued;
 extern std::atomic<std::uint32_t> g_placingFormId;
@@ -169,6 +213,7 @@ void SpawnAndPublish(std::uint32_t recipeFormId, std::uint32_t createdFormId, st
 void StartPlacement(const char* selection);
 bool OnGhostCommitted(RE::TESObjectREFR* placed = nullptr);
 void ResetPlacementOwnership();
+bool PlacementInFlight();
 void RetirePlacementOwnership();
 void RunFreedomCommand(std::string_view cmd);
 void HideScrapOverlay();
@@ -179,7 +224,7 @@ void PumpDeferredScrap();
 void ClearScrapAfterPlacementCancel();
 void ArmScrapAfterPlacementCancel();
 void TickScrapAfterPlacementCancel();
-void ToggleRecipeTagForSearch(std::uint32_t cobjFormId);
+void ToggleRecipeTagForSearch(std::uint32_t cobjFormId, std::optional<bool> a_desired = std::nullopt);
 void CancelPlacementFromUI();
 void RegisterWorkshopPlacedSink();
 void RegisterWorkshopDestroyedSink();

@@ -12,6 +12,8 @@ namespace WorkshopControllerInput
 
     [[nodiscard]] bool InstallCrafting(std::atomic<PrismaView>* view);
     void ActivateCrafting();
+    [[nodiscard]] bool InstallWeaponBench(std::atomic<PrismaView>* view);
+    void ActivateWeaponBench();
     void PushCraftingPrompts(PrismaView view);
     void NoteViewFocused(PrismaView view);
     void NoteHeldObject(bool holding);

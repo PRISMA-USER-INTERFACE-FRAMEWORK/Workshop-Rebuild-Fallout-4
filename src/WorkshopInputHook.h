@@ -16,6 +16,7 @@ namespace WorkshopInputHook
     [[nodiscard]] bool Install();
     [[nodiscard]] bool IsInstalled();
     void SetActive(bool active);
+    [[nodiscard]] bool IsActive();
     void OnClosed();
     bool IsFocused();
     [[nodiscard]] bool HoldingPlacement();
@@ -24,6 +25,7 @@ namespace WorkshopInputHook
 
     void OnPlacementStarted();
     void OnPlacementEnded(bool active);
+bool IsTyping();
 
     void SetTextFocus(bool typing);
 

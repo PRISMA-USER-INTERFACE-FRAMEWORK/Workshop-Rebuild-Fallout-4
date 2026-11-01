@@ -1,4 +1,3 @@
-// Constraint: moved native bindings must match source:src/main.cpp at 5fc7723.
 #include "RuntimeInternal.h"
 #include <nlohmann/json.hpp>
 
@@ -46,23 +45,23 @@ static void OnHelperDomReady(PrismaView view)
     g_helperControlsReady.store(false, std::memory_order_release);
     bool controlsReady = true;
 
-    if (!BindGameThreadUIEvent(view, "prisma_close", [](const char*, void*) {
+    if (!BindGameThreadUIEventSafe(view, "prisma_close", [](const char*, void*) {
         DismissHelper();
     })) controlsReady = false;
 
-    if (!BindGameThreadUIEvent(view, "prisma_build_item", [](const char* arg, void*) {
+    if (!BindGameThreadUIEventSafe(view, "prisma_build_item", [](const char* arg, void*) {
         StartPlacement(arg);
     })) controlsReady = false;
 
-    if (!BindGameThreadUIEvent(view, "requestBuildables", [](const char*, void*) {
+    if (!BindGameThreadUIEventSafe(view, "requestBuildables", [](const char*, void*) {
         PushHelperData();
     })) controlsReady = false;
 
-    if (!BindGameThreadUIEvent(view, "requestWorkshopPage", [](const char* arg, void*) {
+    if (!BindGameThreadUIEventSafe(view, "requestWorkshopPage", [](const char* arg, void*) {
         RequestWorkshopPage(arg);
     })) controlsReady = false;
 
-    if (!BindGameThreadUIEvent(view, "prisma_scrap", [](const char*, void*) {
+    if (!BindGameThreadUIEventSafe(view, "prisma_scrap", [](const char*, void*) {
         if (g_scrapOverlayOpen.load()) ConfirmScrap();
         else if (g_scrapSuppressLatch.load() <= 0) {
             if (g_placing.load()) {
@@ -73,40 +72,51 @@ static void OnHelperDomReady(PrismaView view)
             }
         }
     })) controlsReady = false;
-    if (!BindGameThreadUIEvent(view, "prisma_scrap_cancel", [](const char*, void*) {
+    if (!BindGameThreadUIEventSafe(view, "prisma_scrap_cancel", [](const char*, void*) {
         CancelScrapConfirm();
     })) controlsReady = false;
-    if (!BindGameThreadUIEvent(view, "prisma_cancel", [](const char*, void*) {
+    if (!BindGameThreadUIEventSafe(view, "prisma_cancel", [](const char*, void*) {
         CancelPlacementFromUI();
     })) controlsReady = false;
 
-    if (!BindGameThreadUIEvent(view, "prisma_freedom", [](const char* arg, void*) {
+    if (!BindGameThreadUIEventSafe(view, "prisma_freedom", [](const char* arg, void*) {
         RunFreedomCommand(arg ? arg : "");
     })) controlsReady = false;
 
-    if (!BindGameThreadUIEvent(view, "prisma_tag", [](const char* arg, void*) {
-        ToggleRecipeTagForSearch(arg ? ParseHexOr(arg, 0) : 0);
+    if (!BindGameThreadUIEventSafe(view, "prisma_tag", [](const char* arg, void*) {
+        if (!arg || !arg[0]) return;
+        const std::string_view request(arg);
+        const auto comma = request.find(',');
+        const auto recipeId = ParseHexOr(request.substr(0, comma), 0);
+        if (!recipeId) return;
+        std::optional<bool> desired;
+        if (comma != std::string_view::npos) {
+            const auto state = request.substr(comma + 1);
+            if (state == "1") desired = true;
+            else if (state == "0") desired = false;
+        }
+        ToggleRecipeTagForSearch(recipeId, desired);
     })) controlsReady = false;
 
-    g_api->RegisterJSListener(g_helperView, "prisma_text_focus", [](const char* arg) {
+    g_api->RegisterJSListener(g_helperView, "prisma_text_focus", SafeJSListener([](const char* arg) {
         WorkshopInputHook::SetTextFocus(arg && arg[0] == '1');
-    });
+    }));
 
-    g_api->RegisterJSListener(g_helperView, "prisma_panel_rects", [](const char* arg) {
+    g_api->RegisterJSListener(g_helperView, "prisma_panel_rects", SafeJSListener([](const char* arg) {
         WorkshopInputHook::SetPanelRects(arg);
-    });
+    }));
 
-    g_api->RegisterJSListener(g_helperView, "saveUiScale", [](const char* arg) {
+    g_api->RegisterJSListener(g_helperView, "saveUiScale", SafeJSListener([](const char* arg) {
         SaveScale("HelperScale", arg ? ParseIntOr(arg, 100) : 100);
-    });
+    }));
 
-    if (!BindGameThreadUIEvent(view, "requestWorkshopStats", [](const char*, void*) {
+    if (!BindGameThreadUIEventSafe(view, "requestWorkshopStats", [](const char*, void*) {
         PushWorkshopStats();
     })) controlsReady = false;
 
-    g_api->RegisterJSListener(g_helperView, "saveTheme", [](const char* arg) {
+    g_api->RegisterJSListener(g_helperView, "saveTheme", SafeJSListener([](const char* arg) {
         SaveTheme(arg ? arg : "tarkov");
-    });
+    }));
     if (!controlsReady) {
         logger::critical("PrismaCrafting: workshop control-plane binding failed; helper will remain inactive");
         if (WorkshopSessionActive(session) && !QueueHelperDomReadyBootstrap(view, false, session) && WorkshopSessionActive(session)) {

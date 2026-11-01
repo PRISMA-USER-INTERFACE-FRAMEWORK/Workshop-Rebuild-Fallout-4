@@ -10,6 +10,7 @@ namespace WorkshopFreedom
     extern std::atomic<bool> s_camFreezeTime;
     extern std::atomic<bool> s_heldPlace;
     extern std::atomic<bool> s_heldCam;
+    extern std::atomic<bool> s_heldSnap;
     extern std::atomic<float> s_freeCamDistance;
     extern std::atomic<float> s_freeCamSpeed;
 

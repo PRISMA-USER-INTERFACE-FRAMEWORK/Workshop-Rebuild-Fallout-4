@@ -59,6 +59,7 @@ namespace WorkbenchUpgrades
     bool IsRecipeCraftable(const std::string& category, int createdValue);
 
     bool UnlockAllBenches();
+    void SetUnlockAll(bool a_unlock);
 
     std::string LockReason(const std::string& category, int createdValue);
 

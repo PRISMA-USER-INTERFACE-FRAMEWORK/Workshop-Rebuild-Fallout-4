@@ -34,9 +34,9 @@ namespace WorkshopControllerInput
             std::size_t promptCount = 0;
             const char* promptFunction = nullptr;
             const char* owner = nullptr;
-            PrismaView bound = 0;
-            PrismaView focusEntryBoundView = 0;
-            PrismaView browsingBoundView = 0;
+            std::atomic<PrismaView> bound{ 0 };
+            std::atomic<PrismaView> focusEntryBoundView{ 0 };
+            std::atomic<PrismaView> browsingBoundView{ 0 };
         };
 
         enum class Phase
@@ -50,6 +50,7 @@ namespace WorkshopControllerInput
 
         Slot s_workshop;
         Slot s_crafting;
+        Slot s_weaponBench;
 
         bool Ready(const Slot& slot)
         {
@@ -99,9 +100,18 @@ namespace WorkshopControllerInput
 
         void ForgetBindings(Slot& slot)
         {
-            slot.bound = 0;
-            slot.focusEntryBoundView = 0;
-            slot.browsingBoundView = 0;
+            slot.bound.store(0, std::memory_order_release);
+            slot.focusEntryBoundView.store(0, std::memory_order_release);
+            slot.browsingBoundView.store(0, std::memory_order_release);
+        }
+
+        bool EnsureApi(Slot& slot)
+        {
+            ForgetBindings(slot);
+            if (!s_api) s_api = PRISMA_UI_API::RequestPluginAPI<PRISMA_UI_API::IVPrismaUI12>();
+            if (s_api) return true;
+            logger::error("{}: PrismaUI V12 is unavailable", slot.owner);
+            return false;
         }
 
         bool InPhase(const Table::Binding& binding, Phase phase)
@@ -141,7 +151,7 @@ namespace WorkshopControllerInput
                 anyFocusEntry = anyFocusEntry || phase != Phase::Focused;
                 ok = BindOne(slot, view, binding, phase) && ok;
             }
-            if (phase == Phase::Browsing && slot.focusEntryBoundView != view) panelFocus = nullptr;
+            if (phase == Phase::Browsing && slot.focusEntryBoundView.load(std::memory_order_acquire) != view) panelFocus = nullptr;
             if (panelFocus && (phase == Phase::Always || anyFocusEntry))
                 ok = BindOne(slot, view, *panelFocus, phase) && ok;
             return ok;
@@ -153,7 +163,7 @@ namespace WorkshopControllerInput
                 const Table::Binding& binding = slot.bindings[i];
                 if (InPhase(binding, Phase::Browsing)) s_api->UnbindControllerFocusEntry(view, binding.button);
             }
-            slot.browsingBoundView = 0;
+            slot.browsingBoundView.store(0, std::memory_order_release);
         }
 
         void SyncBrowsing(Slot& slot, PrismaView view)
@@ -162,20 +172,20 @@ namespace WorkshopControllerInput
                 UnbindBrowsing(slot, view);
                 return;
             }
-            if (slot.browsingBoundView == view) return;
-            slot.browsingBoundView = BindPhase(slot, view, Phase::Browsing) ? view : 0;
+            if (slot.browsingBoundView.load(std::memory_order_acquire) == view) return;
+            slot.browsingBoundView.store(BindPhase(slot, view, Phase::Browsing) ? view : 0, std::memory_order_release);
         }
 
         bool BindActions(Slot& slot)
         {
             if (!Ready(slot)) return false;
             const PrismaView view = slot.view->load(std::memory_order_acquire);
-            if (slot.bound != view)
-                slot.bound = BindPhase(slot, view, Phase::Focused) ? view : 0;
+            if (slot.bound.load(std::memory_order_acquire) != view)
+                slot.bound.store(BindPhase(slot, view, Phase::Focused) ? view : 0, std::memory_order_release);
             SyncBrowsing(slot, view);
-            if (slot.focusEntryBoundView != view)
-                slot.focusEntryBoundView = BindPhase(slot, view, Phase::Always) ? view : 0;
-            return slot.bound == view;
+            if (slot.focusEntryBoundView.load(std::memory_order_acquire) != view)
+                slot.focusEntryBoundView.store(BindPhase(slot, view, Phase::Always) ? view : 0, std::memory_order_release);
+            return slot.bound.load(std::memory_order_acquire) == view;
         }
 
         void SyncHeldObject(void*)
@@ -231,6 +241,7 @@ namespace WorkshopControllerInput
         {
             PushPrompts(s_workshop);
             PushPrompts(s_crafting);
+            PushPrompts(s_weaponBench);
         }
 
         void ReleaseFocus(const char*, void*)
@@ -278,15 +289,20 @@ namespace WorkshopControllerInput
         s_crafting.promptCount = std::size(Table::kCraftingPrompts);
         s_crafting.promptFunction = "setPrompts";
         s_crafting.owner = "WorkshopControllerInput(crafting)";
-        ForgetBindings(s_crafting);
-        if (!s_api) {
-            s_api = PRISMA_UI_API::RequestPluginAPI<PRISMA_UI_API::IVPrismaUI12>();
-            if (!s_api) {
-                logger::error("WorkshopControllerInput: PrismaUI V12 is unavailable for the crafting view");
-                return false;
-            }
-        }
-        return true;
+        return EnsureApi(s_crafting);
+    }
+
+    bool InstallWeaponBench(std::atomic<PrismaView>* view)
+    {
+        s_weaponBench.view = view;
+        s_weaponBench.active = nullptr;
+        s_weaponBench.bindings = Table::kWeaponBenchBindings;
+        s_weaponBench.bindingCount = std::size(Table::kWeaponBenchBindings);
+        s_weaponBench.prompts = Table::kWeaponBenchPrompts;
+        s_weaponBench.promptCount = std::size(Table::kWeaponBenchPrompts);
+        s_weaponBench.promptFunction = "setWeaponBenchPrompts";
+        s_weaponBench.owner = "WorkshopControllerInput(weapon bench)";
+        return EnsureApi(s_weaponBench);
     }
 
     void Activate()
@@ -306,6 +322,14 @@ namespace WorkshopControllerInput
         BindUIEvents(s_crafting);
         if (!BindActions(s_crafting)) return;
         PushPrompts(s_crafting);
+    }
+
+    void ActivateWeaponBench()
+    {
+        if (!Ready(s_weaponBench)) return;
+        BindUIEvents(s_weaponBench);
+        if (!BindActions(s_weaponBench)) return;
+        PushPrompts(s_weaponBench);
     }
 
     void PushCraftingPrompts(PrismaView view)
@@ -331,10 +355,12 @@ namespace WorkshopControllerInput
 
         if (!s_api) return;
         Slot* slot = nullptr;
-        if (s_workshop.view && s_workshop.view->load(std::memory_order_acquire) == view)
-            slot = &s_workshop;
-        else if (s_crafting.view && s_crafting.view->load(std::memory_order_acquire) == view)
-            slot = &s_crafting;
+        for (Slot* candidate : { &s_workshop, &s_crafting, &s_weaponBench }) {
+            if (candidate->view && candidate->view->load(std::memory_order_acquire) == view) {
+                slot = candidate;
+                break;
+            }
+        }
         if (!slot) return;
 
         if (!BindActions(*slot))

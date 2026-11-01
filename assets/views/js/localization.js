@@ -9,7 +9,7 @@ function applyTranslations() {
   document.querySelectorAll('[data-l10n]').forEach(el => {
     el.textContent = pcText(el.getAttribute('data-l10n'), el.pcTranslationVars);
   });
-  ['title', 'placeholder', 'data-pb-label'].forEach(attr => {
+  ['title', 'placeholder', 'aria-label', 'data-pb-label'].forEach(attr => {
     document.querySelectorAll('[data-l10n-' + attr + ']').forEach(el => {
       el.setAttribute(attr, pcText(el.getAttribute('data-l10n-' + attr)));
     });

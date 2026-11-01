@@ -1,4 +1,3 @@
-// Constraint: moved native bindings must match source:src/main.cpp at 5fc7723.
 #include "RuntimeInternal.h"
 
 int ParseIntOr(std::string_view s, int fallback)
@@ -46,15 +45,86 @@ void MarkViewAsPanel(PrismaView view)
 }
 
 bool BindGameThreadUIEvent(PrismaView view, const char* functionName,
-                                  PRISMA_UI_API::GameThreadUIEventCallback callback)
+                                  PRISMA_UI_API::GameThreadUIEventCallback callback, void* userdata)
 {
     if (!g_api || !view || !functionName || !callback)
         return false;
-    if (!g_api->BindGameThreadUIEvent(view, functionName, callback, nullptr)) {
+    if (!g_api->BindGameThreadUIEvent(view, functionName, callback, userdata)) {
         logger::error("PrismaCrafting: failed to bind game-thread UI event '{}'", functionName ? functionName : "");
         return false;
     }
     return true;
+}
+
+namespace
+{
+    struct UiCallbackEntry
+    {
+        std::function<void(const char*, void*)> callback;
+        void* userdata = nullptr;
+    };
+    std::mutex g_uiCallbackLock;
+    std::unordered_map<std::uintptr_t, std::unique_ptr<UiCallbackEntry>> g_uiCallbacks;
+    std::unordered_map<std::string, std::uintptr_t> g_uiCallbackBindings;
+    std::atomic<std::uintptr_t> g_uiCallbackSerial{ 0 };
+
+    void InvokeUiCallback(const char* a_argument, void* a_token)
+    {
+        std::function<void(const char*, void*)> callback;
+        void* userdata = nullptr;
+        {
+            std::lock_guard lock(g_uiCallbackLock);
+            const auto it = g_uiCallbacks.find(reinterpret_cast<std::uintptr_t>(a_token));
+            if (it == g_uiCallbacks.end()) return;
+            callback = it->second->callback;
+            userdata = it->second->userdata;
+        }
+        try {
+            if (callback) callback(a_argument, userdata);
+        } catch (const std::exception& e) {
+            logger::error("PrismaCrafting: game-thread UI callback threw: {}", e.what());
+        } catch (...) {
+            logger::error("PrismaCrafting: game-thread UI callback threw an unknown exception");
+        }
+    }
+
+    std::uintptr_t StoreUiCallback(const std::string& a_binding, std::function<void(const char*, void*)> a_callback,
+        void* a_userdata)
+    {
+        std::lock_guard lock(g_uiCallbackLock);
+        if (const auto existing = g_uiCallbackBindings.find(a_binding); existing != g_uiCallbackBindings.end()) {
+            if (auto entry = g_uiCallbacks.find(existing->second); entry != g_uiCallbacks.end()) {
+                entry->second->callback = std::move(a_callback);
+                entry->second->userdata = a_userdata;
+                return existing->second;
+            }
+        }
+        const auto token = g_uiCallbackSerial.fetch_add(1, std::memory_order_acq_rel) + 1;
+        auto entry = std::make_unique<UiCallbackEntry>();
+        entry->callback = std::move(a_callback);
+        entry->userdata = a_userdata;
+        g_uiCallbacks.emplace(token, std::move(entry));
+        g_uiCallbackBindings.emplace(a_binding, token);
+        return token;
+    }
+
+    void EraseUiCallback(const std::string& a_binding, std::uintptr_t a_token)
+    {
+        std::lock_guard lock(g_uiCallbackLock);
+        g_uiCallbacks.erase(a_token);
+        g_uiCallbackBindings.erase(a_binding);
+    }
+}
+
+bool BindGameThreadUIEventSafeImpl(PrismaView view, const char* functionName,
+    std::function<void(const char*, void*)> callback, void* userdata)
+{
+    if (!functionName) return false;
+    const std::string binding = std::to_string(static_cast<std::uint64_t>(view)) + "#" + functionName;
+    const auto token = StoreUiCallback(binding, std::move(callback), userdata);
+    if (BindGameThreadUIEvent(view, functionName, &InvokeUiCallback, reinterpret_cast<void*>(token))) return true;
+    EraseUiCallback(binding, token);
+    return false;
 }
 
 std::atomic<PrismaView>     g_view{ 0 };
@@ -65,6 +135,8 @@ std::atomic<std::uint32_t>  g_craftMenuGeneration{ 0 };
 std::atomic<std::uint32_t>  g_wsSession{ 0 };
 std::atomic<bool>           g_cookingBench{ false };
 std::atomic<bool>           g_cheatMode{ false };
+std::atomic<bool>           g_allowCheatMode{ true };
+std::atomic<bool>           g_modelPreviews{ true };
 
 static std::mutex        g_menuNameLock;
 static RE::BSFixedString g_menuNameGuarded;
@@ -79,6 +151,11 @@ void SetMenuName(const RE::BSFixedString& a_name)
     InvalidateCraftPageQuery();
     std::lock_guard<std::mutex> lk(g_menuNameLock);
     g_menuNameGuarded = a_name;
+}
+
+void ResetCraftCheatMode()
+{
+    g_cheatMode.store(false, std::memory_order_release);
 }
 
 bool CraftSessionMatches(std::uint32_t generation)
@@ -119,6 +196,12 @@ void ClearBenchBypass()
 {
     std::lock_guard<std::mutex> lk(g_bypassLock);
     g_bypassedMenu.clear();
+}
+
+bool BenchBypassActive()
+{
+    std::lock_guard<std::mutex> lk(g_bypassLock);
+    return !g_bypassedMenu.empty();
 }
 
 PrismaView ActiveView()
@@ -254,8 +337,19 @@ std::vector<RE::TESObjectREFR*> GetWorkshopSourceRefs()
             crafting::ids::CollectLinkedWorkshopContainers };
         RE::BSScrapArray<RE::NiPointer<RE::TESObjectREFR>> linked;
         collectLinked(linked, true);
-        for (auto& c : linked)
-            if (c) AddSourceRef(refs, c.get());
+        std::vector<RE::NiPointer<RE::TESObjectREFR>> pinned;
+        for (auto& c : linked) {
+            if (!c) continue;
+            AddSourceRef(refs, c.get());
+            pinned.push_back(c);
+        }
+        // Constraint: keep the NiPointers alive while the caller uses the raw refs; the previous pins release on the next call.
+        {
+            static std::mutex pinLock;
+            static std::vector<RE::NiPointer<RE::TESObjectREFR>> retained;
+            std::lock_guard<std::mutex> lock(pinLock);
+            retained = std::move(pinned);
+        }
         if (!refs.empty()) {
             logger::info("PrismaCrafting: workshop supply pool = {} container(s) (settlement + supply lines)",
                          refs.size());

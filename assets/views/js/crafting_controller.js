@@ -207,7 +207,9 @@ window.addEventListener('prisma-controller-action', event => {
     detail.action === 'nav.left' || detail.action === 'nav.right';
   if (detail.state !== 'pressed' && !(repeats && detail.state === 'repeat')) return;
   const ae = document.activeElement;
-  if (repeats && ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA')) return;
+  const textEntry = ae && (ae.tagName === 'TEXTAREA' ||
+    (ae.tagName === 'INPUT' && /^(text|search|email|url|tel|password|number)$/.test(ae.type)));
+  if (repeats && textEntry) return;
   if (detail.action !== 'craft.confirm') craftNavAt = ++craftInputSeq;
   if (detail.action === 'craft.confirm' && clickCraftPointerTarget()) return;
   handleCraftingNavigation({

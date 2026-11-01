@@ -1,12 +1,13 @@
 function releasePanelFocus() {
+    workshopFreedomHeld.rotate = workshopFreedomHeld.move = false;
     if (typeof window.prisma_release_focus === 'function') window.prisma_release_focus('');
 }
 
 window.controllerScrap = actScrap;
 window.controllerFavorite = () => {
     if (!selectedItem) return;
-    toggleFav(selectedItem);
-    actTag();
+    const favorited = toggleFav(selectedItem);
+    actTag(favorited === true);
 };
 
 const WORKSHOP_ZONES = ['top', 'cats', 'subs', 'filters', 'strip'];
@@ -18,6 +19,7 @@ const WORKSHOP_ZONE_SELECTOR = {
 };
 let workshopZone = 'strip';
 let workshopTopIndex = 0;
+let workshopRingShown = false;
 
 function workshopZoneItems(zone) {
     const selector = WORKSHOP_ZONE_SELECTOR[zone];
@@ -41,6 +43,7 @@ function workshopFocusRing() {
     }
     if (!el || typeof el.classList.add !== 'function') return;
     el.classList.add('controller-focus');
+    workshopRingShown = true;
     if (typeof el.scrollIntoView === 'function') el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
 }
 
@@ -64,11 +67,18 @@ let workshopNavStreak = 0;
 const WORKSHOP_NAV_FAST_AFTER = 10;
 const WORKSHOP_NAV_FAST_STEP = 3;
 
+function workshopStripTarget(dir, step) {
+    if (navIndex < 0) return 0;
+    if (dir < 0) return navIndex === 0 ? -1 : Math.max(0, navIndex - step);
+    const last = currentView().length - 1;
+    return navIndex >= last ? navIndex + step : Math.min(last, navIndex + step);
+}
+
 function workshopStepWithinZone(dir, state) {
     if (workshopZone === 'strip') {
         workshopNavStreak = state === 'repeat' ? workshopNavStreak + 1 : 0;
         const step = workshopNavStreak > WORKSHOP_NAV_FAST_AFTER ? WORKSHOP_NAV_FAST_STEP : 1;
-        navSelect(navIndex < 0 ? 0 : Math.max(0, navIndex + dir * step), false);
+        navSelect(workshopStripTarget(dir, step), false);
     } else if (workshopZone === 'top') {
         const count = workshopZoneItems('top').length;
         workshopTopIndex = Math.max(0, Math.min(count - 1, workshopTopIndex + dir));
@@ -161,6 +171,7 @@ function workshopFreedomAction(action, state) {
 
 function workshopHandleAction(action, state) {
     if (isScrapOverlayOpen()) {
+        if (state === 'released' && (action === 'workshop.mod_rotate' || action === 'workshop.mod_move')) { workshopFreedomAction(action, state); return; }
         if (state !== 'pressed') return;
         if (action === 'workshop.panel_focus' || action === 'workshop.back') actScrapCancel();
         else if (action === 'workshop.place') actScrapConfirm();
@@ -196,7 +207,10 @@ window.addEventListener('prisma-input-device-change', () => {
 
 function workshopKeys(tokens, ps) {
     const list = Array.isArray(tokens) ? tokens : [tokens];
-    return list.map(token => window.PrismaCG.renderKey(token, ps)).join('');
+    return list.map(token => {
+        if (typeof token !== 'string' || !/^[A-Za-z0-9_+:/ .-]{1,40}$/.test(token)) return '';
+        try { return window.PrismaCG.renderKey(token, ps); } catch (error) { return ''; }
+    }).join('');
 }
 
 window.setWorkshopPrompts = arg => {
@@ -205,8 +219,13 @@ window.setWorkshopPrompts = arg => {
     window.workshopPromptData = d;
     const ps = !!d.ps;
     (d.items || []).forEach(item => {
-        const key = document.querySelector('#' + item.id + ' .k');
-        const label = document.querySelector('#' + item.id + ' .l');
+        if (!item || typeof item.id !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(item.id)) return;
+        let key = null, label = null;
+        try {
+            const row = document.getElementById(item.id);
+            key = row && row.querySelector('.k');
+            label = row && row.querySelector('.l');
+        } catch (error) { return; }
         if (key) {
             key.innerHTML = workshopKeys(item.t, ps);
             if (key.classList) key.classList.toggle('k-gp', key.innerHTML.indexOf('cg-img') >= 0);
@@ -240,7 +259,7 @@ document.addEventListener('keydown', e => {
     if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA')) return;
     if (e.ctrlKey || e.altKey || e.metaKey) return;
     const k = (e.key || '').toLowerCase();
-    if (k === 'a' || e.key === 'ArrowLeft') navSelect(navIndex <= 0 ? 0 : navIndex - 1, false);
+    if (k === 'a' || e.key === 'ArrowLeft') navSelect(navIndex < 0 ? 0 : navIndex - 1, false);
     else if (k === 'd' || e.key === 'ArrowRight') navSelect(navIndex < 0 ? 0 : navIndex + 1, false);
     else if (k === 'w' || e.key === 'ArrowUp') cycleCategory(-1);
     else if (k === 's' || e.key === 'ArrowDown') cycleCategory(1);
