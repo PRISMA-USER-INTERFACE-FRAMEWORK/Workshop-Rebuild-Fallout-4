@@ -299,20 +299,21 @@ bool SpawnPlacementGhost(std::uint32_t a_recipeId, std::uint32_t a_createdId)
     DeleteGhostRef(g_ghostRef.Load(), "SpawnPlacementGhost stale-cleanup");
     g_ghostRef.Store({});
 
-    if (object->GetFormType() == RE::ENUM_FORM_ID::kFLOR) {
+    const bool isFurniture = object->GetFormType() == RE::ENUM_FORM_ID::kFURN;
+    if (object->GetFormType() == RE::ENUM_FORM_ID::kFLOR || isFurniture) {
         if (SelectVanillaMenuPath(path)) {
             RE::Workshop::CreateNewReference(ctx, false);
-            if (auto* floraHandle = RE::Workshop::GetPlacementItem(); floraHandle && floraHandle->get()) {
-                g_ghostRef.Store(*floraHandle);
-                logger::info("PrismaCrafting: [GHOST] flora {:08X} spawned through the vanilla placement path",
+            if (auto* placedHandle = RE::Workshop::GetPlacementItem(); placedHandle && placedHandle->get()) {
+                g_ghostRef.Store(*placedHandle);
+                logger::info("PrismaCrafting: [GHOST] {:08X} spawned through the vanilla placement path",
                              object->GetFormID());
                 return true;
             }
-            logger::warn("PrismaCrafting: vanilla flora placement produced no placement item");
+            logger::warn("PrismaCrafting: vanilla placement produced no placement item for {:08X}", object->GetFormID());
         } else {
-            logger::warn("PrismaCrafting: vanilla menu selection unavailable for flora {:08X}", object->GetFormID());
+            logger::warn("PrismaCrafting: vanilla menu selection unavailable for {:08X}", object->GetFormID());
         }
-        return false;
+        if (!isFurniture) return false;
     }
 
     if (crafting::ids::WorkshopDataResolvable()) {
