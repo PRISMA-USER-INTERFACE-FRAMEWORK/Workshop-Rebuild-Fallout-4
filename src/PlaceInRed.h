@@ -8,8 +8,6 @@ namespace PlaceInRed
     {
         bool placementStatus{ false };
         bool yellowMovement{ false };
-        bool timerBypass{ false };
-        bool wsMode{ false };
         bool groundSnap{ false };
         bool objectSnap{ false };
     };

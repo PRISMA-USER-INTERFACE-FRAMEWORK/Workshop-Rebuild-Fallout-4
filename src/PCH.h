@@ -14,11 +14,13 @@
 #include <vector>
 
 #include <spdlog/spdlog.h>
-#include <spdlog/sinks/basic_file_sink.h>
+#include <spdlog/sinks/ostream_sink.h>
 #pragma warning(pop)
 
 using namespace std::literals;
 
 namespace logger = spdlog;
+
+#include "PrismaGameThreadCompat.h"
 
 #define DLLEXPORT __declspec(dllexport)

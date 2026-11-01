@@ -1,0 +1,242 @@
+[size=5][b]Workshop Rebuilt 1.2.0[/b][/size]
+
+[spoiler]
+
+Workshop Rebuilt 1.2.0 is a month of work: the interface moves onto the current PrismaUI framework, the crafting menu and the settlement build panel can be played with a controller, and a long list of crafting and settlement fixes makes both menus steadier. Controller support is still awaiting its full in-game acceptance pass.
+
+[b]Important[/b]
+
+This release is built against the [b]PrismaUI_F4 2.1.1[/b] public headers and requires [b]PrismaUI_F4 2.2.0 or newer[/b] at runtime. Older framework builds are not supported — if the interface misbehaves after updating Workshop Rebuilt, update the framework as well.
+
+It supports [b]Fallout 4 1.10.163 (Old-Gen)[/b] and [b]1.11.191, 1.11.221 and 1.11.240 (Anniversary)[/b], including the settlement build helper. Next-Gen 1.10.984 is supported including the settlement build helper (its addresses were found by static analysis and have not been tried in game yet); 1.10.980 loads with the build helper off.
+
+[size=4][b]Controller support[/b][/size]
+
+[list]
+[*]The D-pad now navigates both the crafting menu and the settlement build panel, with a visible focus outline that follows your selection and scrolls it into view.[/*]
+[*]You can enter and leave the settlement panel without a keyboard: [b]Back[/b] (View/Share) takes cursor focus and hands it back. Previously this needed the C key, which a controller cannot press.[/*]
+[*]A crafts, confirms and places; B backs out and cancels; X opens the scrap confirmation; Y favourites and tags the selected item. Holding B closes the crafting menu or the Workshop.[/*]
+[*]Crafting: D-pad Left/Right move along the filter row and reach the pager; LB/RB switch categories; B backs out of a recipe's detail view; the Stations panel keeps focus.[/*]
+[*]Settlement panel: Left/Right browse, Up/Down change category, LB/RB walk the dock tabs, and the shortcuts for every free-build key work from the pad. Selecting an item no longer places it by itself.[/*]
+[*]Button prompts render the framework's shared Xbox and PlayStation art at a consistent size, and refresh when you pick up or put down a controller.[/*]
+[*]Held directions repeat at a comfortable rate, while a held A no longer places the same building over and over. Fixed stuck controller modifiers and slider D-pad input.[/*]
+[/list]
+
+[size=4][b]Crafting menu[/b][/size]
+
+[list]
+[*]Recipes sort into the right category from their item data first, with name matching only as a fallback. Whole-word matching keeps vanilla names like compound consumables and headgear in the right place.[/*]
+[*]Recipe cards list every requirement. Tool badges only show for plain "has at least one" requirements, and perk badges follow the perk rank the recipe actually compares against, and only for conditions the game checks on the player alone.[/*]
+[*]Crafting refuses requests that do not fit the bench you are at, and stops before taking payment when a required material cannot be resolved.[/*]
+[*]Junk-material totals, stack counts and condition totals no longer wrap or overflow, and scrap yields no longer count themselves.[/*]
+[*]The menu recovers after a filter hides your current category, after the page is recreated, after a failed binding, and when reopening a bench. Cooking titles stay correct across refreshes, and stale station and cheat-mode state is cleared on reopen.[/*]
+[*]UNLOCK ALL and upgrade refresh work on every bench open, and workbench upgrades are saved with your game.[/*]
+[*]Cheat mode is off unless you switch it on in the ini ([b]AllowCheatMode[/b]); the toggle is hidden while it is off.[/*]
+[*]Names and prices display correctly with non-English characters, and the interface has packaged translations.[/*]
+[/list]
+
+[size=4][b]Settlement build helper[/b][/size]
+
+[list]
+[*]The helper now arms on every supported game version, and a bad menu entry can no longer stop it from loading.[/*]
+[*]Placement and scrap no longer fall out of step when a settlement changes, a menu closes mid-action, or an item is placed twice; a cancelled placement cleans up its ghost and any half-spawned object.[/*]
+[*]Materials: building takes from the workshop's own storage first and only charges the plugin for its own placements. The happiness figure matches the one the game's HUD shows.[/*]
+[*]The catalog pages long lists, keeps favourites and filters, shows tool requirements in the detail panel, and refreshes when it changes. Tilt, rotate and move only work on a held item.[/*]
+[*]Rotation and movement settings can no longer hang the game with extreme values, and malformed key bindings and panel messages are rejected.[/*]
+[*]Placement notices show as translated text.[/*]
+[/list]
+
+[size=4][b]PrismaUI 2.1.1[/b][/size]
+
+[list]
+[*]Updated to the PrismaUI 2.1.1 public API. PrismaUI_F4 2.2.0 or newer is required at runtime for controller bridge recovery.[/*]
+[*]The mouse pointer now stays with whichever panel owns focus, including after the game window loses and regains focus.[/*]
+[/list]
+
+[size=4][b]Settings and safety[/b][/size]
+
+[list]
+[*]Your settings file and recipe exports survive a failed or interrupted save, and work on folders with non-English names.[/*]
+[*]Bad numbers in recipe or workbench configuration files are rejected instead of crashing, and overrides that do not match anything produce a warning.[/*]
+[/list]
+
+[size=4][b]Under the hood[/b][/size]
+
+[list]
+[*]The plugin now ships the framework's current public interface instead of an older pinned copy.[/*]
+[*]The release archive installs through its bundled FOMOD: a mod manager installs the plugin, the interface files and the sounds in one step.[/*]
+[*]Builds now run on GitHub (Windows runner) against the Next-Gen compatible CommonLibF4.[/*]
+[/list]
+
+[/spoiler]
+
+[size=5][b]Workshop Rebuilt 1.0.2[/b][/size]
+
+[spoiler]
+
+Workshop Rebuilt 1.0.2 focuses on controller input, Workshop focus, and crafting interface reliability.
+
+[b]Important[/b]
+
+This release continues to support [b]Fallout 4 1.10.163 / Old-Gen[/b]. Anniversary Edition controller behavior remains under live validation.
+
+[size=4][b]Controller and Focus[/b][/size]
+
+[list]
+[*]Migrated Crafting and Workshop controller actions to PrismaUI's authoritative V12 controller interface.[/*]
+[*]Added reliable controller focus entry for visible Workshop panels before they have PrismaUI focus.[/*]
+[*]Improved controller ownership during bridge startup so mapped actions cannot fall through to Fallout or legacy synthetic input.[/*]
+[*]Improved D-pad repeat handling and one-action-per-press behavior for confirm and cancel controls.[/*]
+[*]Improved controller behavior across focus, refocus, modal, view-destruction, and view-recreation transitions.[/*]
+[*]Removed the duplicate raw Workshop controller input sink.[/*]
+[/list]
+
+[size=4][b]Crafting Interface[/b][/size]
+
+[list]
+[*]Fixed redundant controller reselection when the already-selected recipe remains active.[/*]
+[*]Fixed repeated recipe-description requests when a description is empty or unchanged.[/*]
+[*]Improved restoration of the controller navigation zone after overlays and modal transitions.[/*]
+[*]Reduced prompt refresh work by updating prompts on device and state changes instead of every input event.[/*]
+[*]Preserved Xbox and PlayStation prompt styles while using the framework's shared controller state.[/*]
+[/list]
+
+[size=4][b]Workshop Controls[/b][/size]
+
+[list]
+[*]Improved Workshop panel focus and release behavior.[/*]
+[*]Back / Circle now enters or releases Prisma panel focus without leaving stale ownership behind.[/*]
+[*]X / Square opens the scrap confirmation action without allowing the background Workshop panel to act.[/*]
+[*]Y / Triangle supports favorite and component-tag actions through the shared controller bridge.[/*]
+[*]Improved modal cancel behavior so Back releases the correct focused layer.[/*]
+[*]Improved controller prompt updates while the Workshop interface is already open.[/*]
+[/list]
+
+[size=4][b]Compatibility and Stability[/b][/size]
+
+[list]
+[*]Crafting now consumes the synchronized PrismaUI V12 public API header used by the framework and PrismaHUD.[/*]
+[*]Cleared controller mappings safely during view destruction so recreated views cannot inherit stale actions.[/*]
+[*]Expanded automated coverage for controller mappings, focus entry, bridge lifecycle, focus churn, event storms, modal ownership, and prompt refresh behavior.[/*]
+[*]Preserved keyboard-only handling for advanced Workshop placement controls whose controller bindings still require in-game collision validation.[/*]
+[/list]
+
+[size=4][b]Validation[/b][/size]
+
+Live controller validation on Fallout 4 Old Gen and Anniversary Edition remains a separate runtime acceptance step.
+
+[size=4][b]TL;DR[/b][/size]
+
+[list]
+[*]More reliable controller focus and Workshop ownership[/*]
+[*]One action per physical controller press[/*]
+[*]Less prompt and recipe-description refresh spam[/*]
+[*]Cleaner Crafting focus after overlays and modal transitions[/*]
+[*]V12 controller API integration[/*]
+[/list]
+
+[/spoiler]
+
+[size=5][b]Workshop Rebuilt 1.0.1[/b][/size]
+
+Workshop Rebuilt 1.0.1 is a major update focused on making settlement building faster, smoother, and more reliable.
+
+[b]Important[/b]
+
+This release currently supports [b]Fallout 4 1.10.163 / Old-Gen[/b]. AE support is coming later.
+
+Make sure you are using the latest required version of PrismaUI.
+
+[size=4][b]Settlement Workshop[/b][/size]
+
+[list]
+[*]Significantly improved settlement menu performance, especially with large load orders and heavily built settlements.[/*]
+[*]Improved performance when using settlements connected through supply lines.[/*]
+[*]Fixed settlement statistics sometimes showing 0 when first entering Workshop mode.[/*]
+[*]Happiness, Food, Water, Defense, Population, and Beds now update correctly as the settlement loads.[/*]
+[*]The first workshop item is now selected automatically when opening the menu.[/*]
+[*]Fixed the Workshop interface occasionally remaining on screen after quickly entering and leaving build mode.[/*]
+[*]Added persistent theme selection across crafting, cooking, and settlement menus.[/*]
+[/list]
+
+[size=4][b]Building and Placement[/b][/size]
+
+[list]
+[*]Major improvements to placement stability.[/*]
+[*]Improved rapid object selection, reselection, placement, and cancellation.[/*]
+[*]Fixed objects sometimes refusing to place while using the Workshop interface.[/*]
+[*]Fixed E / Enter occasionally failing to place the selected object.[/*]
+[*]Fixed movement keys occasionally becoming stuck after placing an object.[/*]
+[*]Improved Place In Red reliability.[/*]
+[*]Improved Workshop exit behavior after placing or cancelling objects.[/*]
+[*]Fixed several crashes that could occur during rapid or heavy settlement building.[/*]
+[/list]
+
+[size=4][b]Crafting[/b][/size]
+
+[list]
+[*]The crafting interface is now translucent so you can still see the game world while crafting.[/*]
+[*]Improved controller navigation throughout the crafting interfaces.[/*]
+[*]Added automatic switching between keyboard/mouse and controller prompts.[/*]
+[*]Xbox and PlayStation button prompts are supported.[/*]
+[*]Mouse-wheel scrolling now works correctly in crafting and settlement menus.[/*]
+[*]Improved menu navigation and selection behavior.[/*]
+[*]Improved handling of recipes and menus that change while the interface is open.[/*]
+[*]God Mode ([b]tgm[/b]) now provides unlimited crafting and building materials without consuming them.[/*]
+[/list]
+
+[size=4][b]Item Previews[/b][/size]
+
+[list]
+[*]Item previews now use PrismaUI's live 3D preview system.[/*]
+[*]Removed the old pre-rendered item preview system.[/*]
+[*]Removed roughly 19 MB of obsolete preview files.[/*]
+[*]Items that cannot be previewed will now simply leave the preview area empty instead of showing an unrelated image.[/*]
+[/list]
+
+[size=4][b]Controller Support[/b][/size]
+
+[list]
+[*]Improved controller support throughout Workshop Rebuilt.[/*]
+[*]Improved D-pad navigation.[/*]
+[*]Improved confirm and cancel controls.[/*]
+[*]Improved switching between the Workshop interface and normal game controls.[/*]
+[*]Controller prompts now update while menus are already open.[/*]
+[*]Improved switching between controller and keyboard/mouse without reopening the menu.[/*]
+[/list]
+
+[size=4][b]Compatibility[/b][/size]
+
+[list]
+[*]Improved ECO Universal Workbench compatibility.[/*]
+[*]Fixed cases where ECO users could become stuck in a workbench animation.[/*]
+[*]Unsupported ECO workbench types now correctly fall back to ECO's normal interface.[/*]
+[*]Improved Settlement Menu Manager compatibility.[/*]
+[/list]
+
+[size=4][b]Other Fixes[/b][/size]
+
+[list]
+[*]Improved menu opening and closing reliability.[/*]
+[*]Improved behavior when rapidly entering and leaving Workshop mode.[/*]
+[*]Improved switching between crafting, settlement, and normal gameplay controls.[/*]
+[*]Fixed several cases where Workshop controls could remain active after leaving the menu.[/*]
+[*]Removed several obsolete systems and unused files.[/*]
+[*]General stability and performance improvements.[/*]
+[/list]
+
+[size=4][b]TL;DR[/b][/size]
+
+[list]
+[*]Faster settlement menus[/*]
+[*]More reliable object placement[/*]
+[*]Fewer Workshop crashes[/*]
+[*]Better controller support[/*]
+[*]Fixed stuck movement controls[/*]
+[*]Better Place In Red support[/*]
+[*]Fixed settlement stats[/*]
+[*]Free materials while using God Mode[/*]
+[*]Better ECO and SMM compatibility[/*]
+[*]Live 3D item previews[/*]
+[*]Improved crafting and Workshop UI[/*]
+[/list]

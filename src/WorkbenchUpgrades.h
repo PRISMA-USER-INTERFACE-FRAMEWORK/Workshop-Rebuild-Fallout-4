@@ -5,7 +5,7 @@
 #include <vector>
 
 namespace F4SE { class SerializationInterface; }
-namespace RE { class TESForm; }
+namespace RE { class TESForm; class TESObjectREFR; }
 
 namespace WorkbenchUpgrades
 {
@@ -56,11 +56,10 @@ namespace WorkbenchUpgrades
 
     int PlayerLevel(const std::string& benchId);
 
-    bool IsPowered(const std::string& benchId);
-
     bool IsRecipeCraftable(const std::string& category, int createdValue);
 
     bool UnlockAllBenches();
+    void SetUnlockAll(bool a_unlock);
 
     std::string LockReason(const std::string& category, int createdValue);
 

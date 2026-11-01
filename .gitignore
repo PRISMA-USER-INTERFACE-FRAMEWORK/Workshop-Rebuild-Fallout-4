@@ -5,3 +5,6 @@ build-wine/
 
 # Logs
 *.log
+
+# Python bytecode
+__pycache__/

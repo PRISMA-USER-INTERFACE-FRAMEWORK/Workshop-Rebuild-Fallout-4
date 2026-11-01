@@ -2,6 +2,9 @@
 
 #include "PlaceInRed.h"
 
+#include "DebugLog.h"
+#include "WorkshopIDs.h"
+
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -72,6 +75,17 @@ namespace PlaceInRed
         {
             const std::uint8_t* begin{ nullptr };
             std::size_t         size{ 0 };
+
+            [[nodiscard]] const std::uint8_t* LastStart(std::size_t a_len) const
+            {
+                if (!begin || a_len == 0 || size < a_len) return nullptr;
+                return begin + (size - a_len);
+            }
+
+            [[nodiscard]] bool Holds(const std::uint8_t* a_at, std::size_t a_len) const
+            {
+                return begin && a_at >= begin && a_len <= size && a_at <= begin + (size - a_len);
+            }
         };
 
         TextSection Text()
@@ -93,9 +107,8 @@ namespace PlaceInRed
 
             const auto pat = Compile(sig);
             const std::size_t n = pat.bytes.size();
-            if (!n || text.size < n) return 0;
-
-            const auto* last = text.begin + (text.size - n);
+            const auto* last = text.LastStart(n);
+            if (!last) return 0;
             const auto* cur = text.begin;
             std::uintptr_t first = 0;
             while (cur <= last) {
@@ -143,12 +156,8 @@ namespace PlaceInRed
         std::atomic<bool> s_objectSnapOn{ true };
 
         std::uintptr_t s_statusByte{ 0 };
-        std::uintptr_t s_wsModeAddr{ 0 };
-        std::uint8_t   s_wsModeSaved[4]{};
-        bool           s_wsModePoked{ false };
 
         bool s_yellowMovement{ false };
-        bool s_timerBypass{ false };
 
         struct GroundEdit {
             std::uintptr_t addr{ 0 };
@@ -205,10 +214,10 @@ namespace PlaceInRed
         std::uintptr_t DiscoverStatusGlobal(std::vector<ImmStore>& out)
         {
             const auto text = Text();
-            if (!text.begin || text.size < 8) return 0;
+            const auto* last = text.LastStart(7);
+            if (!last) return 0;
 
             std::map<std::uintptr_t, std::vector<ImmStore>> byTarget;
-            const auto* last = text.begin + (text.size - 7);
             const auto* cur = text.begin;
             while (cur <= last) {
                 const auto* hit = static_cast<const std::uint8_t*>(
@@ -255,8 +264,8 @@ namespace PlaceInRed
             };
 
             const auto text = Text();
-            if (!text.begin || text.size < 6) return;
-            const auto* last = text.begin + (text.size - 6);
+            const auto* last = text.LastStart(6);
+            if (!last) return;
             const auto* cur = text.begin;
             int patchedCount = 0;
             int missed = 0;
@@ -279,6 +288,7 @@ namespace PlaceInRed
 
                 for (std::size_t back = 2; back <= 9 && !done; ++back) {
                     const auto* q = reinterpret_cast<const std::uint8_t*>(addr - back);
+                    if (!text.Holds(q, back)) break;
                     if (q[0] != movImm || !inert(q + 2, back - 2)) continue;
                     const std::array<std::uint8_t, 1> replacement{ 0x01 };
                     const std::array<std::uint8_t, 1> expect{ q[1] };
@@ -289,16 +299,19 @@ namespace PlaceInRed
 
                 for (std::size_t back = 3; back <= 9 && !done; ++back) {
                     const auto* q = reinterpret_cast<const std::uint8_t*>(addr - back);
+                    if (!text.Holds(q, back)) break;
                     if (q[0] != 0x0F || (q[1] != 0x44 && q[1] != 0x45)) continue;
                     if (q[2] != cmovDst && !(!isAl && q[2] == 0xC9)) continue;
                     if (!inert(q + 3, back - 3)) continue;
 
                     std::uintptr_t start = addr - back;
                     std::size_t len = 3;
-                    const auto rex = *reinterpret_cast<const std::uint8_t*>(start - 1);
-                    if (rex >= 0x40 && rex <= 0x4F) {
-                        --start;
-                        ++len;
+                    if (q > text.begin) {
+                        const auto rex = *reinterpret_cast<const std::uint8_t*>(start - 1);
+                        if (rex >= 0x40 && rex <= 0x4F) {
+                            --start;
+                            ++len;
+                        }
                     }
 
                     std::array<std::uint8_t, 8> replacement{};
@@ -330,17 +343,18 @@ namespace PlaceInRed
         void DiscoverStatusNeighbors(std::uintptr_t status)
         {
             const auto text = Text();
-            if (!text.begin || text.size < 8) return;
-            const auto* last = text.begin + (text.size - 7);
+            const auto* lastTint = text.LastStart(9);
+            const auto* lastFlag = text.LastStart(8);
+            if (!lastTint || !lastFlag) return;
             const auto adjacent = [status](std::uintptr_t target) {
                 return target + 16 >= status && target <= status;
             };
             const std::array<std::uint8_t, 1> off{ 0x00 };
             const std::array<std::uint8_t, 1> on{ 0x01 };
 
-            for (const auto* cur = text.begin; cur <= last;) {
+            for (const auto* cur = text.begin; cur <= lastTint;) {
                 const auto* hit = static_cast<const std::uint8_t*>(
-                    std::memchr(cur, 0xC6, static_cast<std::size_t>(last - cur) + 1));
+                    std::memchr(cur, 0xC6, static_cast<std::size_t>(lastTint - cur) + 1));
                 if (!hit) break;
                 cur = hit + 1;
                 if (hit[1] != 0x05 || hit[6] != 0x01 || hit[7] != 0x84 || hit[8] != 0xC0) continue;
@@ -349,9 +363,9 @@ namespace PlaceInRed
                 AddEdit("red tint", addr + 6, off, on);
                 break;
             }
-            for (const auto* cur = text.begin; cur <= last;) {
+            for (const auto* cur = text.begin; cur <= lastFlag;) {
                 const auto* hit = static_cast<const std::uint8_t*>(
-                    std::memchr(cur, 0xB2, static_cast<std::size_t>(last - cur) + 1));
+                    std::memchr(cur, 0xB2, static_cast<std::size_t>(lastFlag - cur) + 1));
                 if (!hit) break;
                 cur = hit + 1;
                 if (hit[1] != 0x01 || hit[2] != 0x88 || hit[3] != 0x15) continue;
@@ -370,7 +384,7 @@ namespace PlaceInRed
                 std::string_view             sig;
                 std::array<std::uint8_t, 5>  patched;
             };
-            static const GSite gsites[] = {
+            static const GSite ogSites[] = {
                 { "ground snap clamp",
                   "E8 ? ? ? ? 0F B6 F0 88 85 B8 16 00 00 E9",
                   { 0x30, 0xC0, 0x90, 0x90, 0x90 } },
@@ -381,6 +395,21 @@ namespace PlaceInRed
                   "E8 ? ? ? ? F3 44 0F 10 44 24 68 80 3D 11 D9 6E 05",
                   { 0x90, 0x90, 0x90, 0x90, 0x90 } },
             };
+
+            static const GSite aeSites[] = {
+                { "ground snap clamp",
+                  "E8 ? ? ? ? 88 85 ? ? ? ? E9",
+                  { 0x30, 0xC0, 0x90, 0x90, 0x90 } },
+                { "ground snap zcorr1",
+                  "E8 ? ? ? ? F3 0F 10 05 ? ? ? ? 41 0F 2E C3 74 0D",
+                  { 0x90, 0x90, 0x90, 0x90, 0x90 } },
+                { "ground snap zcorr2",
+                  "E8 ? ? ? ? 80 3D ? ? ? ? 00 74 26 80 3D ? ? ? ? 00 75 26",
+                  { 0x90, 0x90, 0x90, 0x90, 0x90 } },
+            };
+
+            const bool isOG = REX::FModule::IsRuntimeOG();
+            const auto& gsites = isOG ? ogSites : aeSites;
             s_groundEdits.clear();
             for (const auto& s : gsites) {
                 const auto a = FindUnique(s.label, s.sig);
@@ -401,8 +430,10 @@ namespace PlaceInRed
                 logger::warn("PlaceInRed: ground-snap call sites incomplete; ground snap disabled");
             }
 
-            if (const auto o = FindUnique("1.10.163 object snap",
-                    "F3 0F 10 35 ? ? ? ? 33 F6 48 89 85 A0 00 00 00")) {
+            const char* const objSnapSig = isOG
+                ? "F3 0F 10 35 ? ? ? ? 33 F6 48 89 85 A0 00 00 00"
+                : "F3 0F 10 35 ? ? ? ? 0F 28 C6 48 89 85 C0 00 00 00";
+            if (const auto o = FindUnique("object snap", objSnapSig)) {
                 s_objectSnapAddr = o;
                 std::memcpy(s_objectSnapOriginal, reinterpret_cast<const void*>(o), 8);
                 logger::info("PlaceInRed: object snap -> {:#x}", o - ModuleBase());
@@ -411,7 +442,8 @@ namespace PlaceInRed
 
         void DiscoverIndependentPlaceEdits()
         {
-            const auto sel = REL::ID(1229851).address() + 0x23;
+            const auto sel = REL::Relocation<std::uintptr_t>(
+                                 crafting::ids::WorkshopCanSelectRef).address() + 0x23;
             static constexpr std::array<std::uint8_t, 3> nop3{ 0x0F, 0x1F, 0x00 };
             static constexpr std::array<std::uint8_t, 3> original{ 0x8B, 0x58, 0x14 };
             s_yellowMovement = AddEdit("yellow object movement", sel, nop3, original);
@@ -422,19 +454,13 @@ namespace PlaceInRed
     {
         if (s_scanned.exchange(true)) return;
 
-        if (!REX::FModule::IsRuntimeOG()) {
-            logger::critical("PlaceInRed: PrismaCrafting workshop replacement is validated for Fallout 4 "
-                             "1.10.163 only; refusing workshop code patches on this runtime");
-            return;
-        }
-
         DiscoverSnapControls();
         DiscoverIndependentPlaceEdits();
 
         std::vector<ImmStore> stores;
         s_statusByte = DiscoverStatusGlobal(stores);
         if (!s_statusByte) {
-            logger::critical("PlaceInRed: could not identify the 1.10.163 placement-status byte; F3 disabled");
+            logger::critical("PlaceInRed: could not identify the placement-status byte; F3 disabled");
         } else {
             int fixedStores = 0;
             for (const auto& s : stores) {
@@ -450,9 +476,10 @@ namespace PlaceInRed
         }
 
         const auto caps = GetCapabilities();
-        logger::info("PlaceInRed: 1.10.163 capabilities | placement={} yellow={} timer={} wsMode={} "
+        logger::info("PlaceInRed: {} capabilities | placement={} yellow={} "
                      "groundSnap={} objectSnap={} | {} place edits armed",
-                     caps.placementStatus, caps.yellowMovement, caps.timerBypass, caps.wsMode,
+                     REX::FModule::IsRuntimeOG() ? "1.10.163" : "AE",
+                     caps.placementStatus, caps.yellowMovement,
                      caps.groundSnap, caps.objectSnap, s_pir.size());
     }
 
@@ -467,8 +494,6 @@ namespace PlaceInRed
         return {
             s_statusByte != 0,
             s_yellowMovement,
-            s_timerBypass,
-            s_wsModeAddr != 0,
             s_groundEdits.size() == 3,
             s_objectSnapAddr != 0,
         };
@@ -476,7 +501,11 @@ namespace PlaceInRed
 
     bool SetGroundSnap(bool enabled)
     {
-        if (s_groundEdits.size() != 3) return false;
+        if (s_groundEdits.size() != 3) {
+            DLOG(Placement, "SetGroundSnap({}) refused: {} of 3 call sites armed",
+                 enabled, s_groundEdits.size());
+            return false;
+        }
 
         for (const auto& e : s_groundEdits) {
             const auto* live = reinterpret_cast<const std::uint8_t*>(e.addr);
@@ -495,7 +524,10 @@ namespace PlaceInRed
 
     bool SetObjectSnap(bool enabled)
     {
-        if (!s_objectSnapAddr) return false;
+        if (!s_objectSnapAddr) {
+            DLOG(Placement, "SetObjectSnap({}) refused: no object-snap site discovered", enabled);
+            return false;
+        }
         const auto* live = reinterpret_cast<const std::uint8_t*>(s_objectSnapAddr);
         const bool isOriginal = std::memcmp(live, s_objectSnapOriginal, 8) == 0;
         const bool isDisabled = std::memcmp(live, kObjectSnapDisabled.data(), 8) == 0;
@@ -514,30 +546,22 @@ namespace PlaceInRed
     {
         if (!s_statusByte || !s_pirOn.load()) return;
         auto* placement = RE::Workshop::GetCurrentPlacementItemData();
-        if (!placement || !placement->placementItem.get()) return;
+        if (!placement || !placement->placementItem.get()) {
+            DLOG(Placement, "HoldValid: no placement item (data={} item={})",
+                 placement != nullptr, placement && placement->placementItem.get() != nullptr);
+            return;
+        }
         *reinterpret_cast<volatile std::uint8_t*>(s_statusByte) = 0x01;
     }
 
     void SetPlaceInRed(bool on)
     {
-        if (!s_statusByte || s_pirOn.load() == on) return;
-        ApplyPlaceEdits(on);
-
-        if (s_wsModeAddr) {
-            if (on) {
-                std::memcpy(s_wsModeSaved, reinterpret_cast<const void*>(s_wsModeAddr + 3), 2);
-                std::memcpy(s_wsModeSaved + 2, reinterpret_cast<const void*>(s_wsModeAddr + 9), 2);
-                s_wsModePoked = true;
-                static constexpr std::uint8_t zeros[]{ 0x00, 0x00 };
-                static constexpr std::uint8_t ones[]{ 0x01, 0x01 };
-                REL::WriteSafe(s_wsModeAddr + 3, zeros, sizeof(zeros));
-                REL::WriteSafe(s_wsModeAddr + 9, ones, sizeof(ones));
-            } else if (s_wsModePoked) {
-                REL::WriteSafe(s_wsModeAddr + 3, s_wsModeSaved, 2);
-                REL::WriteSafe(s_wsModeAddr + 9, s_wsModeSaved + 2, 2);
-                s_wsModePoked = false;
-            }
+        if (!s_statusByte || s_pirOn.load() == on) {
+            DLOG(Placement, "SetPlaceInRed({}) no-op (statusByte={} current={})",
+                 on, s_statusByte != 0, s_pirOn.load());
+            return;
         }
+        ApplyPlaceEdits(on);
 
         s_pirOn.store(on);
         logger::info("PlaceInRed: place in red {}", on ? "ON" : "OFF");

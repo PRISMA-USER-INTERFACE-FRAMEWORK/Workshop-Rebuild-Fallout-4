@@ -1,6 +1,3 @@
-
-
-
 body.theme-pipboy {
   --panel:         #04120a;
   --card:          transparent;
@@ -20,19 +17,16 @@ body.theme-pipboy {
   --kr:            #23ff62;
 }
 
-
 body.theme-pipboy #panel,
 body.theme-pipboy #body,
 body.theme-pipboy #gridCol,
 body.theme-pipboy #grid { background: transparent; }
 body.theme-pipboy header { display: none; }
 
-
 body.theme-pipboy #body {
   flex: 0 0 auto; align-items: flex-end; gap: calc(0.6em * var(--ui-fs));
   padding: 0 calc(2.5em * var(--ui-fs)) calc(1.2em * var(--ui-fs));
 }
-
 
 body.theme-pipboy #catRail,
 body.theme-pipboy #gridCol,
@@ -43,12 +37,10 @@ body.theme-pipboy #detail {
   display: flex; flex-direction: column; overflow: hidden;
 }
 
-
 body.theme-pipboy #catRail { overflow-y: auto; }
 body.theme-pipboy #gridCol > #grid { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 body.theme-pipboy #detail > .detail-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 body.theme-pipboy #detail > .craft-area { flex: 0 0 auto; }
-
 
 body.theme-pipboy #catRail::-webkit-scrollbar,
 body.theme-pipboy #grid::-webkit-scrollbar,
@@ -72,14 +64,13 @@ body.theme-pipboy #detail::before {
   font-size: calc(0.68em * var(--ui-fs)); letter-spacing: 0.22em;
   color: #03140a; background: var(--accent); text-shadow: none;
 }
-body.theme-pipboy #catRail::before { content: "CATEGORIES"; }
-body.theme-pipboy #gridCol::before { content: "RECIPES"; }
-body.theme-pipboy #detail::before  { content: "REQUIRES"; }
+body.theme-pipboy #catRail::before { content: attr(data-pb-label); }
+body.theme-pipboy #gridCol::before { content: attr(data-pb-label); }
+body.theme-pipboy #detail::before  { content: attr(data-pb-label); }
 
 body.theme-pipboy #catRail { width: calc(15em * var(--ui-fs)); border-right: 1px solid var(--border); }
 body.theme-pipboy #detail  { width: calc(22em * var(--ui-fs)); border-left: 1px solid var(--border);
   flex-shrink: 0; }
-
 
 body.theme-pipboy #grid {
   display: block; padding: calc(0.3em * var(--ui-fs)) 0; overflow-y: auto;
@@ -97,7 +88,6 @@ body.theme-pipboy .card.sel .card-type { color: #03140a; }
 body.theme-pipboy .card-icon,
 body.theme-pipboy .card-val { display: none; }
 
-
 body.theme-pipboy .card-top { display: flex; order: 2; margin-left: auto; align-items: center;
   gap: calc(0.4em * var(--ui-fs)); background: none; padding: 0; }
 body.theme-pipboy .rar { display: none; }
@@ -114,7 +104,6 @@ body.theme-pipboy #pager { background: transparent; border-top: 1px solid var(--
   padding: calc(0.3em * var(--ui-fs)); }
 body.theme-pipboy .pg-btn { background: transparent; border-color: var(--border); color: var(--dim); }
 
-
 body.theme-pipboy .preview {
   position: fixed; left: 50%; top: calc(6vh); transform: translateX(-50%);
   width: min(34vh, 30vw); height: min(34vh, 30vw); aspect-ratio: auto;
@@ -127,15 +116,12 @@ body.theme-pipboy .d-name {
 }
 body.theme-pipboy .d-sub { display: none; }
 
-
 body.theme-pipboy .detail-body { padding: calc(0.6em * var(--ui-fs)); }
 body.theme-pipboy .d-desc { display: none; }
 body.theme-pipboy .d-bench { background: transparent; border-color: var(--border); color: var(--text); }
 body.theme-pipboy .sec-label { color: var(--dim); border-bottom: 1px solid var(--border); }
 body.theme-pipboy .comp-row { border-bottom: 1px solid rgba(31,122,58,0.35); }
 body.theme-pipboy .comp-bar-bg { background: rgba(35,255,98,0.15); }
-
-
 
 body.theme-pipboy .cat-bar {
   position: static; margin-top: auto; flex: 0 0 auto;
@@ -157,14 +143,12 @@ body.theme-pipboy .lk-btn.active { background: var(--accent); color: #03140a; te
 body.theme-pipboy .filter-input { background: #061c0e; border-color: var(--border);
   color: var(--text); font-size: calc(0.62em * var(--ui-fs)); }
 
-
 body.theme-pipboy #craftBtn.can { background: #0a2c16; color: var(--accent);
   border-color: var(--accent); font-weight: normal; }
 body.theme-pipboy #craftBtn.can:hover { background: #114a25; }
 body.theme-pipboy #craftBtn.cant { background: #061c0e; color: var(--accent-d);
   border-color: var(--border); }
 body.theme-pipboy .craft-area { background: #04120a; border-top: 1px solid var(--border); }
-
 
 body.theme-pipboy .cr-row.active { background: var(--accent); color: #03140a; text-shadow: none; }
 body.theme-pipboy .cr-row.active .cr-count { color: #03140a; opacity: 0.75; }

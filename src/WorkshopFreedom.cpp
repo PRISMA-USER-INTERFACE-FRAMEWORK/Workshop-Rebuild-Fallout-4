@@ -1,29 +1,40 @@
 #include "PCH.h"
 
 #include "WorkshopFreedom.h"
+#include "WorkshopFreedomInternal.h"
 
-#include "Paths.h"
+#include "FunctionBounds.h"
+
+#include "DebugLog.h"
+#include "WorkshopIDs.h"
+#include "WorkshopInputHook.h"
+
 #include "PlaceInRed.h"
-#include "SimpleIni.h"
+#include "PrismaGameThreadCompat.h"
 #include "TrampolineGuard.h"
 
 #include <atomic>
-#include <cctype>
 #include <cmath>
-#include <cstdio>
-#include <cstdlib>
+#include <limits>
+#include <nlohmann/json.hpp>
 
 namespace WorkshopFreedom
 {
+    std::atomic<bool> s_enabled{ true };
+    std::atomic<bool> s_camFreezeTime{ false };
+    std::atomic<float> s_freeCamDistance{ 0.0f };
+    std::atomic<float> s_freeCamSpeed{ 10.0f };
+    std::atomic<bool> s_workshopActive{ false };
+    std::atomic<bool> s_heldPlace{ false };
+    std::atomic<bool> s_heldCam{ false };
+    std::atomic<bool> s_heldSnap{ false };
     namespace
     {
+
         constexpr float kDeg2Rad = 0.01745329252f;
 
-        std::atomic<bool> s_enabled{ true };
-        std::atomic<bool> s_workshopActive{ false };
         std::atomic<bool> s_freePlace{ false };
         std::atomic<bool> s_freeCam{ false };
-        std::atomic<bool> s_camFreezeTime{ false };
         std::atomic<bool> s_groundSnapOn{ true };
         std::atomic<bool> s_objectSnapOn{ true };
 
@@ -39,67 +50,34 @@ namespace WorkshopFreedom
         std::atomic<bool> s_zResetPending{ false };
         std::atomic<std::uint32_t> s_heldHandle{ 0 };
 
-        std::atomic<float> s_freeCamDistance{ 0.0f };
-        std::atomic<float> s_freeCamSpeed{ 10.0f };
-
         void RunConsoleCommand(const std::string& cmd)
         {
-            const auto factories = RE::IFormFactory::GetFormFactories();
-            auto* factory = factories[std::to_underlying(RE::ENUM_FORM_ID::kSCPT)];
-            if (!factory) return;
-            auto* script = static_cast<RE::Script*>(factory->DoCreate());
-            if (!script) return;
-            script->SetText(cmd);
-            script->CompileAndRun(nullptr, RE::COMPILER_NAME::kSystemWindow, nullptr);
+            // Constraint: Console::ExecuteCommand has OG and AE ids; CommonLib repeats the last value for the third runtime slot (UNVERIFIED in game).
+            const auto version = REX::FModule::GetExecutingModule().GetFileVersion();
+            if (version != REL::Version{ 1, 10, 163, 0 } && version < REL::Version{ 1, 11, 191, 0 }) {
+                logger::warn("WorkshopFreedom: no verified console entry for runtime {}; skipping '{}'",
+                             version.string(), cmd);
+                return;
+            }
+            RE::Console::ExecuteCommand(cmd.c_str());
             logger::info("WorkshopFreedom: ran console command '{}'", cmd);
         }
 
-        std::uint16_t s_keyFreePlace = VK_F3;
-        std::uint16_t s_keyFreeCam   = VK_F4;
-        std::uint16_t s_keyGrow      = VK_OEM_PLUS;
-        std::uint16_t s_keyShrink    = VK_OEM_MINUS;
-        std::uint16_t s_keyYaw       = VK_NUMPAD4;
-        std::uint16_t s_keyPitch     = VK_NUMPAD8;
-        std::uint16_t s_keyRoll      = VK_NUMPAD7;
-        std::uint16_t s_keySnap      = VK_F6;
-        std::uint16_t s_keyReset     = VK_F7;
-        std::uint16_t s_keyMod       = VK_SHIFT;
-        std::uint16_t s_keyFwd       = VK_HOME;
-        std::uint16_t s_keyBack      = VK_END;
-        std::uint16_t s_keyRight     = VK_INSERT;
-        std::uint16_t s_keyLeft      = VK_DELETE;
-        std::uint16_t s_keyUp        = VK_PRIOR;
-        std::uint16_t s_keyDown      = VK_NEXT;
-
-        float s_scaleStep = 0.05f;
-        float s_rotStep = 15.0f;
-        float s_moveStep = 5.0f;
-
-        std::atomic<bool> s_heldPlace{ false };
-        std::atomic<bool> s_heldCam{ false };
-
-        std::string IniPath()
+        std::atomic<NoticeSink> s_noticeSink{ nullptr };
+        std::atomic<bool (*)()> s_ownsPlacement{ nullptr };
+        void Notify(const char* key, std::initializer_list<std::pair<const char*, std::string>> vars = {})
         {
-            auto p = Paths::F4SEUserDir();
-            p /= "PrismaCrafting.ini";
-            return p.string();
+            auto varsJson = nlohmann::json::object();
+            std::string text = key;
+            for (const auto& [name, value] : vars) {
+                varsJson[name] = value;
+                const std::string token = std::string("{{") + name + "}}";
+                if (const auto at = text.find(token); at != std::string::npos) text.replace(at, token.size(), value);
+            }
+            const auto payload = nlohmann::json{{"key", key}, {"vars", varsJson}}.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
+            if (auto* fn = s_noticeSink.load(); fn && fn(payload.c_str())) return;
+            RE::SendHUDMessage::ShowHUDMessage(text.c_str(), nullptr, true, false);
         }
-
-        std::uint16_t KeyFromIni(CSimpleIniA& ini, const char* key, std::uint16_t fallback)
-        {
-            const char* v = ini.GetValue("Workshop", key, nullptr);
-            if (!v || !v[0]) return fallback;
-            if (v[1] == '\0')
-                return static_cast<std::uint16_t>(std::toupper(static_cast<unsigned char>(v[0])));
-            return static_cast<std::uint16_t>(std::strtoul(v, nullptr, 0));
-        }
-
-        void Notify(const char* msg)
-        {
-            RE::SendHUDMessage::ShowHUDMessage(msg, nullptr, true, false);
-        }
-
-        bool ModHeld() { return (GetAsyncKeyState(s_keyMod) & 0x8000) != 0; }
 
         void ResetOffsets()
         {
@@ -121,8 +99,8 @@ namespace WorkshopFreedom
             if (hadManualZ) {
 
                 const bool desiredGroundSnap = s_groundSnapOn.load();
-                F4SE::GetTaskInterface()->AddTask([desiredGroundSnap] {
-                    PlaceInRed::SetGroundSnap(desiredGroundSnap);
+                PostGameTask("restore-ground-snap", [desiredGroundSnap] {
+                    if (s_workshopActive.load()) PlaceInRed::SetGroundSnap(desiredGroundSnap);
                 });
                 logger::info("WorkshopFreedom: manual vertical placement cleared for new held object");
             }
@@ -143,12 +121,44 @@ namespace WorkshopFreedom
     {
         using FreeBuildFn = bool (*)();
         FreeBuildFn g_origFreeBuildAtPlaceCurrentReference = nullptr;
-        constexpr std::uintptr_t kPlaceCurrentReferenceFreeBuildCallSite = 0x20d02b;
-        constexpr REL::ID        kFreeBuild{ 1583365 };
+        std::uintptr_t FindUniqueCallSite(const char* a_label, std::uintptr_t a_caller,
+                                          std::uintptr_t a_callee)
+        {
+            const auto segments = crafting::bounds::FunctionSegmentsAt(a_caller);
+            if (segments.empty()) {
+                logger::error("WorkshopFreedom: {} -- the exception directory does not describe the "
+                              "caller at {:#x}, so its extent is unknown. Not hooking: a scan with "
+                              "a guessed end can match inside a different function.",
+                              a_label, a_caller);
+                return 0;
+            }
+
+            std::uintptr_t found = 0;
+            std::size_t count = 0;
+            for (const auto& seg : segments) {
+                for (auto at = seg.begin; at + 5 <= seg.end; ++at) {
+                    if (*reinterpret_cast<const std::uint8_t*>(at) != 0xE8) continue;
+                    const auto rel = *reinterpret_cast<const std::int32_t*>(at + 1);
+                    if (at + 5 + static_cast<std::intptr_t>(rel) != a_callee) continue;
+                    if (++count == 1) found = at;
+                }
+            }
+            if (count != 1) {
+                logger::error("WorkshopFreedom: {} -- expected exactly one call site across the {} "
+                              "segment(s) of the function at {:#x}, found {}",
+                              a_label, segments.size(), a_caller, count);
+                return 0;
+            }
+            DLOG(Workshop, "{} call site -> {:#x}", a_label, found);
+            return found;
+        }
+
+        constexpr REL::VariantID kFreeBuild = crafting::ids::WorkshopFreeBuild;
 
         bool Detour_FreeBuildAtPlaceCurrentReference()
         {
             if (s_freePlace.load()) return true;
+            if (const auto owns = s_ownsPlacement.load(); owns && owns()) return true;
             return g_origFreeBuildAtPlaceCurrentReference ?
                 g_origFreeBuildAtPlaceCurrentReference() : false;
         }
@@ -164,7 +174,7 @@ namespace WorkshopFreedom
         bool Normalize(RE::NiPoint3& v)
         {
             const float len2 = v.SqrLength();
-            if (len2 < 1e-8f) return false;
+            if (!std::isfinite(len2) || len2 < 1e-8f) return false;
             const float inv = 1.0f / std::sqrt(len2);
             v.x *= inv; v.y *= inv; v.z *= inv;
             return true;
@@ -174,7 +184,8 @@ namespace WorkshopFreedom
         {
             const auto& c = kViewCentres[s_viewCentre.load()];
             cam->ViewPointToRay(c.x, c.y, &origin, &dir);
-            return Normalize(dir);
+            return std::isfinite(origin.x) && std::isfinite(origin.y) &&
+                   std::isfinite(origin.z) && Normalize(dir);
         }
 
         void MeasureViewCentre(RE::NiCamera* cam, const RE::NiPoint3& engineLookDir)
@@ -248,19 +259,20 @@ namespace WorkshopFreedom
 
         using RegisterPlacementStatusFn =
             void (*)(RE::BSTEventSink<RE::Workshop::PlacementStatusEvent>*);
-        constexpr REL::ID        kRegisterForPlacementStatusEvent{ 1325826 };
+        constexpr REL::VariantID kRegisterForPlacementStatusEvent =
+            crafting::ids::RegisterForPlacementStatusEvent;
 
         using ContextDataCtorFn = RE::Workshop::ContextData* (*)(RE::Workshop::ContextData*, RE::Actor*);
         ContextDataCtorFn g_origContextDataCtor = nullptr;
         ContextDataCtorFn g_origPickContextDataCtor = nullptr;
-        constexpr std::uintptr_t kMainRenderContextDataCallSite = 0xcbd478;
-        constexpr std::uintptr_t kAutoAimPickRefContextDataCallSite = 0xcbd729;
-        constexpr REL::ID        kContextDataCtor{ 1523699 };
+        constexpr REL::VariantID kContextDataCtor = crafting::ids::ContextDataCtor;
 
         RE::Workshop::ContextData* Detour_ContextDataCtor(RE::Workshop::ContextData* ctx, RE::Actor* actor)
         {
             if (g_origContextDataCtor) g_origContextDataCtor(ctx, actor);
             if (!s_workshopActive.load()) return ctx;
+            auto lookPos = ctx->lookPos, lookDir = ctx->lookDir;
+            float zAngle = ctx->zAngle;
 
             auto* placement = RE::Workshop::GetCurrentPlacementItemData();
             if (placement) {
@@ -273,21 +285,21 @@ namespace WorkshopFreedom
             }
 
             auto* cam = RE::Main::WorldRootCamera();
-            if (cam && !s_freeCam.load()) MeasureViewCentre(cam, ctx->lookDir);
+            if (cam && !s_freeCam.load()) MeasureViewCentre(cam, lookDir);
 
             if (cam && s_freeCam.load()) {
                 RE::NiPoint3 org{}, dir{};
                 if (CrosshairRay(cam, org, dir)) {
-                    ctx->lookPos = org;
-                    ctx->lookDir = dir;
+                    lookPos = org;
+                    lookDir = dir;
                     const float dist = s_freeCamDistance.load();
                     if (dist != 0.0f) {
-                        ctx->lookPos.x += dir.x * dist;
-                        ctx->lookPos.y += dir.y * dist;
-                        ctx->lookPos.z += dir.z * dist;
+                        lookPos.x += dir.x * dist;
+                        lookPos.y += dir.y * dist;
+                        lookPos.z += dir.z * dist;
                     }
                     const RE::NiPoint3 flat{ dir.x, dir.y, 0.0f };
-                    if (flat.SqrLength() > 1e-6f) ctx->zAngle = flat.GetZAngleFromVector();
+                    if (flat.SqrLength() > 1e-6f) zAngle = flat.GetZAngleFromVector();
 
                     if (s_freeCamDiag.exchange(false))
                         logger::info("WorkshopFreedom: free-cam aim | centre {} | origin ({:.0f} {:.0f} {:.0f}) | "
@@ -299,7 +311,7 @@ namespace WorkshopFreedom
 
             const float offF = s_offFwd.load(), offR = s_offRight.load();
             if (offF != 0.0f || offR != 0.0f) {
-                RE::NiPoint3 f{ ctx->lookDir.x, ctx->lookDir.y, 0.0f };
+                RE::NiPoint3 f{ lookDir.x, lookDir.y, 0.0f };
                 const float len2 = f.SqrLength();
                 if (len2 > 1e-6f) {
                     const float inv = 1.0f / std::sqrt(len2);
@@ -307,11 +319,15 @@ namespace WorkshopFreedom
                 } else {
                     f = { 0.0f, 1.0f, 0.0f };
                 }
-                ctx->lookPos.x += f.x * offF + f.y * offR;
-                ctx->lookPos.y += f.y * offF - f.x * offR;
+                lookPos.x += f.x * offF + f.y * offR;
+                lookPos.y += f.y * offF - f.x * offR;
             }
 
-            ctx->zAngle += s_yaw.load() * kDeg2Rad;
+            zAngle += s_yaw.load() * kDeg2Rad;
+            if (std::isfinite(lookPos.x) && std::isfinite(lookPos.y) && std::isfinite(lookPos.z) &&
+                std::isfinite(lookDir.x) && std::isfinite(lookDir.y) && std::isfinite(lookDir.z) && std::isfinite(zAngle)) {
+                ctx->lookPos = lookPos; ctx->lookDir = lookDir; ctx->zAngle = zAngle;
+            }
             return ctx;
         }
 
@@ -337,109 +353,84 @@ namespace WorkshopFreedom
 
         using WorkshopUpdateFn = void (*)(RE::Workshop::ContextData*);
         WorkshopUpdateFn g_origWorkshopUpdate = nullptr;
-        constexpr std::uintptr_t kMainRenderWorkshopUpdateCallSite = 0xcbd482;
-        constexpr REL::ID        kWorkshopUpdate{ 679561 };
-        std::atomic<bool> s_tiltApplied{ false };
+        constexpr REL::VariantID kWorkshopUpdate = RE::ID::Workshop::Update;
+        thread_local std::uint32_t s_workshopUpdateDepth = 0; std::atomic<bool> s_tiltApplied{ false };
 
         void Detour_WorkshopUpdate(RE::Workshop::ContextData* ctx)
         {
-            if (auto* fn = s_preUpdate.load()) fn();
+            if (s_workshopUpdateDepth++ != 0) { logger::critical("WorkshopFreedom: re-entrant Workshop::Update detected; skipping deferred pre-update"); if (g_origWorkshopUpdate) g_origWorkshopUpdate(ctx); s_workshopUpdateDepth -= 1; return; } else if (auto* fn = s_preUpdate.load()) fn();
             if (g_origWorkshopUpdate) g_origWorkshopUpdate(ctx);
-            if (!s_workshopActive.load()) return;
+            if (!s_workshopActive.load()) { s_workshopUpdateDepth -= 1; return; }
 
             PlaceInRed::HoldValid();
 
             const float pitch = s_pitch.load(), roll = s_roll.load();
             const bool tilted = pitch != 0.0f || roll != 0.0f;
-            if (!tilted && !s_tiltApplied.load()) return;
+            if ((!tilted && !s_tiltApplied.load()) || !WorkshopInputHook::HoldingPlacement()) { s_workshopUpdateDepth -= 1; return; }
 
             auto* pd = RE::Workshop::GetCurrentPlacementItemData();
-            if (!pd) return;
+            if (!pd) { s_workshopUpdateDepth -= 1; return; }
             auto ref = pd->placementItem.get();
-            if (!ref) return;
+            if (!ref) { s_workshopUpdateDepth -= 1; return; }
             ref->data.angle.x = pitch * kDeg2Rad;
             ref->data.angle.y = roll * kDeg2Rad;
             ref->Update3DPosition(false);
-            s_tiltApplied.store(tilted);
+            s_tiltApplied.store(tilted); s_workshopUpdateDepth -= 1;
         }
 
-        void* HookCallSite(const char* label, std::uintptr_t siteOff,
+        void* HookCallSite(const char* label, std::uintptr_t a_siteAddr,
                            std::uintptr_t targetAddr, void* detour)
         {
-            REL::Relocation<std::uintptr_t> site{ REL::Offset{ siteOff } };
-            const auto* p = reinterpret_cast<const std::uint8_t*>(site.address());
+            const auto* p = reinterpret_cast<const std::uint8_t*>(a_siteAddr);
             bool ok = p[0] == 0xE8;
             if (ok) {
                 const auto rel = *reinterpret_cast<const std::int32_t*>(p + 1);
-                const auto target = site.address() + 5 + rel;
+                const auto target = a_siteAddr + 5 + static_cast<std::intptr_t>(rel);
                 ok = target == targetAddr;
             }
             if (!ok) {
-                logger::critical("WorkshopFreedom: REFUSING {} hook -- RVA {:#x} is not a CALL to {:#x}. "
-                                 "Bytes {:02x} {:02x} {:02x} {:02x} {:02x}",
-                                 label, siteOff, targetAddr, p[0], p[1], p[2], p[3], p[4]);
+                logger::critical("WorkshopFreedom: REFUSING {} hook -- address {:#x} is not a CALL to "
+                                 "{:#x}. Bytes {:02x} {:02x} {:02x} {:02x} {:02x}",
+                                 label, a_siteAddr, targetAddr, p[0], p[1], p[2], p[3], p[4]);
                 return nullptr;
             }
-            return reinterpret_cast<void*>(REL::GetTrampoline().write_call<5>(site.address(), detour));
+            return reinterpret_cast<void*>(REL::GetTrampoline().write_call<5>(a_siteAddr, detour));
         }
     }
 
-    void Init()
-    {
-        CSimpleIniA ini;
-        ini.SetUnicode();
-        ini.LoadFile(IniPath().c_str());
-        s_keyFreePlace = KeyFromIni(ini, "FreePlaceKey", s_keyFreePlace);
-        s_keyFreeCam = KeyFromIni(ini, "FreeCameraKey", s_keyFreeCam);
-        s_keyGrow = KeyFromIni(ini, "ScaleUpKey", s_keyGrow);
-        s_keyShrink = KeyFromIni(ini, "ScaleDownKey", s_keyShrink);
-        s_keyYaw = KeyFromIni(ini, "YawKey", s_keyYaw);
-        s_keyPitch = KeyFromIni(ini, "PitchKey", s_keyPitch);
-        s_keyRoll = KeyFromIni(ini, "RollKey", s_keyRoll);
-        s_keySnap = KeyFromIni(ini, "SnapCycleKey", s_keySnap);
-        s_keyReset = KeyFromIni(ini, "ResetKey", s_keyReset);
-        s_scaleStep = static_cast<float>(ini.GetDoubleValue("Workshop", "ScaleStep", 0.05));
-        s_rotStep = static_cast<float>(ini.GetDoubleValue("Workshop", "RotateStepDegrees", 15.0));
-        s_moveStep = static_cast<float>(ini.GetDoubleValue("Workshop", "MoveStepUnits", 5.0));
-        s_freeCamDistance.store(static_cast<float>(
-            ini.GetDoubleValue("Workshop", "FreeCameraReachUnits", 0.0)));
-        s_camFreezeTime.store(ini.GetBoolValue("Workshop", "FreeCameraFreezesTime", false));
-        s_freeCamSpeed.store(static_cast<float>(
-            ini.GetDoubleValue("Workshop", "FreeCameraSpeed", 10.0)));
-        s_enabled.store(ini.GetBoolValue("Workshop", "Enabled", true));
-
-        if (!s_enabled.load()) logger::warn("WorkshopFreedom: DISABLED via [Workshop]Enabled=0");
-        logger::info("WorkshopFreedom: 1.10.163 keys place={:#x} cam={:#x} groundSnap={:#x} reset={:#x} "
-                     "yaw={:#x} pitch={:#x} roll={:#x}; Shift+groundSnap toggles object snap",
-                     s_keyFreePlace, s_keyFreeCam, s_keySnap, s_keyReset,
-                     s_keyYaw, s_keyPitch, s_keyRoll);
-    }
-
-    void InstallHooks()
+    bool InstallHooks()
     {
         static bool installed = false;
-        if (installed) return;
+        if (installed) return HooksReady();
 
-        if (!REX::FModule::IsRuntimeOG()) {
-            logger::critical("WorkshopFreedom: settlement replacement is validated for Fallout 4 1.10.163; "
-                             "workshop hooks not installed on this runtime");
-            return;
+        if (!crafting::ids::WorkshopDataResolvable()) {
+            logger::error("WorkshopFreedom: workshop hooks NOT installed -- unsupported runtime");
+            return false;
         }
 
         EnsurePrismaCraftingTrampoline();
 
-        g_origFreeBuildAtPlaceCurrentReference = reinterpret_cast<FreeBuildFn>(HookCallSite(
-            "FreeBuild/PlaceCurrentReference", kPlaceCurrentReferenceFreeBuildCallSite,
-            kFreeBuild.address(), &Detour_FreeBuildAtPlaceCurrentReference));
-        g_origContextDataCtor = reinterpret_cast<ContextDataCtorFn>(HookCallSite(
-            "placement ContextData", kMainRenderContextDataCallSite,
-            kContextDataCtor.address(), &Detour_ContextDataCtor));
-        g_origPickContextDataCtor = reinterpret_cast<ContextDataCtorFn>(HookCallSite(
-            "highlight ContextData", kAutoAimPickRefContextDataCallSite,
-            kContextDataCtor.address(), &Detour_PickContextDataCtor));
-        g_origWorkshopUpdate = reinterpret_cast<WorkshopUpdateFn>(HookCallSite(
-            "Workshop::Update", kMainRenderWorkshopUpdateCallSite,
-            kWorkshopUpdate.address(), &Detour_WorkshopUpdate));
+        const auto placeRef = crafting::ids::PlaceCurrentReference.address();
+        const auto mainRender = crafting::ids::MainRenderAEnd.address();
+        const auto autoAim = crafting::ids::AutoAimPickRef.address();
+
+        if (const auto site = FindUniqueCallSite("FreeBuild/PlaceCurrentReference", placeRef,
+                                                 kFreeBuild.address()))
+            g_origFreeBuildAtPlaceCurrentReference = reinterpret_cast<FreeBuildFn>(HookCallSite(
+                "FreeBuild/PlaceCurrentReference", site, kFreeBuild.address(),
+                &Detour_FreeBuildAtPlaceCurrentReference));
+        if (const auto site = FindUniqueCallSite("placement ContextData", mainRender,
+                                                 kContextDataCtor.address()))
+            g_origContextDataCtor = reinterpret_cast<ContextDataCtorFn>(HookCallSite(
+                "placement ContextData", site, kContextDataCtor.address(), &Detour_ContextDataCtor));
+        if (const auto site = FindUniqueCallSite("highlight ContextData", autoAim,
+                                                 kContextDataCtor.address()))
+            g_origPickContextDataCtor = reinterpret_cast<ContextDataCtorFn>(HookCallSite(
+                "highlight ContextData", site, kContextDataCtor.address(), &Detour_PickContextDataCtor));
+        if (const auto site = FindUniqueCallSite("Workshop::Update", mainRender,
+                                                 kWorkshopUpdate.address()))
+            g_origWorkshopUpdate = reinterpret_cast<WorkshopUpdateFn>(HookCallSite(
+                "Workshop::Update", site, kWorkshopUpdate.address(), &Detour_WorkshopUpdate));
 
         PlaceInRed::Init();
 
@@ -455,28 +446,71 @@ namespace WorkshopFreedom
                      g_origWorkshopUpdate != nullptr,
                      caps.placementStatus, caps.yellowMovement, caps.groundSnap, caps.objectSnap);
 
-        installed = true;
+        installed = g_origWorkshopUpdate != nullptr && g_origFreeBuildAtPlaceCurrentReference != nullptr;
+        if (!installed)
+            logger::critical("WorkshopFreedom: required Workshop::Update or FreeBuild/PlaceCurrentReference hook is unavailable; replacement disabled");
+        return installed;
     }
+
+    bool HooksReady() { return g_origWorkshopUpdate != nullptr && g_origFreeBuildAtPlaceCurrentReference != nullptr; }
 
     void SetWorkshopActive(bool active)
     {
-        s_workshopActive.store(active);
-        if (active) return;
-
-        if (s_freeCam.exchange(false)) {
-            const bool freeze = s_camFreezeTime.load();
-            F4SE::GetTaskInterface()->AddTask([freeze] {
-                if (auto* cam = RE::PlayerCamera::GetSingleton()) cam->ToggleFreeCameraMode(freeze);
-            });
+        if (active) {
+            s_workshopActive.store(true, std::memory_order_release);
+            return;
         }
 
-        s_freePlace.store(false);
-        s_groundSnapOn.store(true);
-        s_objectSnapOn.store(true);
+        if (s_freeCam.load(std::memory_order_acquire)) {
+            const bool freeze = s_camFreezeTime.load(std::memory_order_acquire);
+            const auto exitFreeCamera = [freeze] {
+                if (!PrismaCraftingThreading::IsGameThread()) {
+                    logger::critical("WorkshopFreedom: free-camera teardown reached without verified game-thread ownership");
+                    return;
+                }
+                auto* cam = RE::PlayerCamera::GetSingleton();
+                if (!cam) {
+                    logger::critical("WorkshopFreedom: cannot leave free camera during workshop teardown -- PlayerCamera unavailable");
+                    return;
+                }
+                cam->ToggleFreeCameraMode(freeze);
+                s_freeCam.store(false, std::memory_order_release);
+                s_heldCam.store(false, std::memory_order_release);
+                logger::info("WorkshopFreedom: free camera OFF during workshop teardown");
+                NotifyToggles();
+            };
+
+            if (PrismaCraftingThreading::IsGameThread()) {
+                exitFreeCamera();
+            } else if (!PrismaCraftingThreading::AddGameTask(exitFreeCamera)) {
+                logger::critical("WorkshopFreedom: free-camera teardown task not queued; camera ownership retained");
+            }
+        }
+
+        s_workshopActive.store(false, std::memory_order_release);
+        s_heldPlace.store(false, std::memory_order_release);
+        s_heldCam.store(false, std::memory_order_release);
+        s_heldSnap.store(false, std::memory_order_release);
+        s_tiltApplied.store(false);
         s_heldHandle.store(0);
-        ResetOffsets();
-        s_zResetPending.store(false);
-        F4SE::GetTaskInterface()->AddTask([] { PlaceInRed::RestoreAll(); });
+        const auto restorePlaceInRed = [] {
+            if (!PrismaCraftingThreading::IsGameThread()) {
+                logger::critical("WorkshopFreedom: place-in-red teardown reached without verified game-thread ownership");
+                return;
+            }
+            PlaceInRed::RestoreAll();
+            s_freePlace.store(false);
+            s_groundSnapOn.store(true);
+            s_objectSnapOn.store(true);
+            ResetOffsets();
+            s_zResetPending.store(false);
+            NotifyToggles();
+        };
+        if (PrismaCraftingThreading::IsGameThread()) {
+            restorePlaceInRed();
+        } else if (!PrismaCraftingThreading::AddGameTask(restorePlaceInRed)) {
+            logger::critical("WorkshopFreedom: place-in-red teardown task not queued; patch ownership retained");
+        }
     }
 
     bool FreePlaceEnabled() { return s_freePlace.load(); }
@@ -486,12 +520,14 @@ namespace WorkshopFreedom
 
     void SetToggleChangedCallback(void (*fn)()) { s_toggleChanged.store(fn); }
     void SetPreUpdateHook(void (*fn)()) { s_preUpdate.store(fn); }
+    void SetNoticeSink(NoticeSink fn) { s_noticeSink.store(fn); }
+    void SetPlacementOwnerQuery(bool (*fn)()) { s_ownsPlacement.store(fn); }
 
     void Tick() {}
 
     void ToggleFreePlace()
     {
-        if (!s_workshopActive.load()) return;
+        if (!s_enabled.load() || !s_workshopActive.load()) return;
         if (!PlaceInRed::Available() || !g_origFreeBuildAtPlaceCurrentReference) {
             Notify("Place in red unavailable (1.10.163 placement/commit hook not armed)");
             logger::error("WorkshopFreedom: F3 refused - placementStatus={} freeBuildHook={}",
@@ -514,7 +550,7 @@ namespace WorkshopFreedom
 
     void ToggleFreeCamera()
     {
-        if (!s_workshopActive.load()) return;
+        if (!s_enabled.load() || !s_workshopActive.load()) return;
         if (!g_origContextDataCtor || !g_origPickContextDataCtor) {
             Notify("Free camera unavailable (1.10.163 targeting hooks not armed)");
             logger::error("WorkshopFreedom: F4 refused - placementCtx={} pickCtx={}",
@@ -540,7 +576,7 @@ namespace WorkshopFreedom
 
     void CycleSnap()
     {
-        if (!s_workshopActive.load()) return;
+        if (!s_enabled.load() || !s_workshopActive.load()) return;
         if (!PlaceInRed::GroundSnapAvailable()) {
             Notify("Free height unavailable (1.10.163 ground-snap sites not armed)");
             return;
@@ -563,7 +599,7 @@ namespace WorkshopFreedom
 
     void ToggleObjectSnap()
     {
-        if (!s_workshopActive.load()) return;
+        if (!s_enabled.load() || !s_workshopActive.load()) return;
         if (!PlaceInRed::ObjectSnapAvailable()) {
             Notify("Object snap unavailable (1.10.163 signature not armed)");
             return;
@@ -581,7 +617,7 @@ namespace WorkshopFreedom
 
     void ResetTransform()
     {
-        if (!s_workshopActive.load()) return;
+        if (!s_enabled.load() || !s_workshopActive.load() || !WorkshopInputHook::HoldingPlacement()) return;
         const bool hadManualZ = s_manualZ.load();
         if (auto* d = RE::Workshop::GetCurrentPlacementItemData())
             if (auto ref = d->placementItem.get()) ref->SetScale(1.0f);
@@ -597,7 +633,7 @@ namespace WorkshopFreedom
 
     void NudgeScale(float delta)
     {
-        if (!s_workshopActive.load()) return;
+        if (!s_enabled.load() || !s_workshopActive.load() || !WorkshopInputHook::HoldingPlacement()) return;
         auto* d = RE::Workshop::GetCurrentPlacementItemData();
         if (!d) return;
         auto ref = d->placementItem.get();
@@ -610,36 +646,34 @@ namespace WorkshopFreedom
         s_scale.store(next);
         ref->SetScale(next);
 
-        char buf[48];
-        std::snprintf(buf, sizeof(buf), "Scale %.2f", next);
-        Notify(buf);
+        Notify("Scale {{value}}", {{"value", std::format("{:.2f}", next)}});
     }
 
     void NudgeRotate(int axis, float degrees)
     {
-        if (!s_workshopActive.load()) return;
-        auto wrap = [](float v) {
-            while (v >= 360.0f) v -= 360.0f;
-            while (v < 0.0f) v += 360.0f;
-            return v;
-        };
+        if (!s_enabled.load() || !s_workshopActive.load() || !WorkshopInputHook::HoldingPlacement()) return;
         std::atomic<float>* t = axis == 0 ? &s_yaw : (axis == 1 ? &s_pitch : &s_roll);
-        t->store(wrap(t->load() + degrees));
+        const double current = t->load();
+        if (!std::isfinite(current) || !std::isfinite(degrees)) return;
+        double wrapped = std::fmod(current + static_cast<double>(degrees), 360.0);
+        if (wrapped < 0.0) wrapped += 360.0;
+        const float next = static_cast<float>(wrapped);
+        t->store(next < 360.0f ? next : 0.0f);
 
-        char buf[64];
-        std::snprintf(buf, sizeof(buf), "%s %.0f deg",
-                      axis == 0 ? "Yaw" : (axis == 1 ? "Pitch" : "Roll"), t->load());
-        Notify(buf);
+        Notify(axis == 0 ? "Yaw {{value}} deg" : axis == 1 ? "Pitch {{value}} deg" : "Roll {{value}} deg",
+               {{"value", std::format("{:.0f}", t->load())}});
     }
 
     void NudgeMove(int axis, float units)
     {
-        if (!s_workshopActive.load()) return;
+        if (!s_enabled.load() || !s_workshopActive.load() || !WorkshopInputHook::HoldingPlacement() || !std::isfinite(units)) return;
 
         if (axis == 2) {
             auto* d = RE::Workshop::GetCurrentPlacementItemData();
             if (!d || !d->placementItem.get()) return;
             SyncHeld(d);
+            const double next = s_offUp.load() + static_cast<double>(units);
+            if (!std::isfinite(next) || std::abs(next) > std::numeric_limits<float>::max()) return;
 
             if (!g_origContextDataCtor || !PlaceInRed::GroundSnapAvailable()) {
                 Notify("Vertical override unavailable (1.10.163 placement/snap hook not armed)");
@@ -659,97 +693,18 @@ namespace WorkshopFreedom
                 logger::info("WorkshopFreedom: manual vertical placement enabled; ground snap suspended");
             }
 
-            const float next = s_offUp.load() + units;
-            s_offUp.store(next);
+            s_offUp.store(static_cast<float>(next));
             logger::info("WorkshopFreedom: vertical nudge {:+.0f} -> offset={:.0f}", units, next);
 
-            char buf[64];
-            std::snprintf(buf, sizeof(buf), "Offset up %.0f", next);
-            Notify(buf);
+            Notify("Offset up {{value}}", {{"value", std::format("{:.0f}", next)}});
             return;
         }
 
         std::atomic<float>* t = axis == 0 ? &s_offFwd : &s_offRight;
-        t->store(t->load() + units);
-        char buf[64];
-        std::snprintf(buf, sizeof(buf), "Offset %s %.0f",
-                      axis == 0 ? "forward" : "right", t->load());
-        Notify(buf);
+        const double next = t->load() + static_cast<double>(units);
+        if (!std::isfinite(next) || std::abs(next) > std::numeric_limits<float>::max()) return;
+        t->store(static_cast<float>(next));
+        Notify(axis == 0 ? "Offset forward {{value}}" : "Offset right {{value}}", {{"value", std::format("{:.0f}", t->load())}});
     }
 
-    bool OwnsKey(std::uint16_t vk)
-    {
-        if (!s_enabled.load() || !s_workshopActive.load()) return false;
-        if (vk == s_keyFreePlace || vk == s_keyFreeCam || vk == s_keySnap || vk == s_keyReset ||
-            vk == s_keyGrow || vk == s_keyShrink ||
-            vk == s_keyYaw || vk == s_keyPitch || vk == s_keyRoll)
-            return true;
-        return vk == s_keyFwd || vk == s_keyBack || vk == s_keyRight ||
-               vk == s_keyLeft || vk == s_keyUp || vk == s_keyDown;
-    }
-
-    bool HandleKey(std::uint16_t vk, bool keyUp)
-    {
-        if (!s_enabled.load() || !s_workshopActive.load()) return false;
-        if (!keyUp && OwnsKey(vk)) logger::info("WorkshopFreedom: swallowed vk={:#x}", vk);
-
-        if (vk == s_keyFreePlace) {
-            if (keyUp) s_heldPlace.store(false);
-            else if (!s_heldPlace.exchange(true))
-                F4SE::GetTaskInterface()->AddTask([] { ToggleFreePlace(); });
-            return true;
-        }
-        if (vk == s_keyFreeCam) {
-            if (keyUp) s_heldCam.store(false);
-            else if (!s_heldCam.exchange(true))
-                F4SE::GetTaskInterface()->AddTask([] { ToggleFreeCamera(); });
-            return true;
-        }
-        if (vk == s_keyGrow || vk == s_keyShrink) {
-            if (!keyUp) {
-                const float step = vk == s_keyGrow ? s_scaleStep : -s_scaleStep;
-                F4SE::GetTaskInterface()->AddTask([step] { NudgeScale(step); });
-            }
-            return true;
-        }
-        if (vk == s_keySnap) {
-            if (!keyUp) {
-                const bool objectSnap = ModHeld();
-                F4SE::GetTaskInterface()->AddTask([objectSnap] {
-                    if (objectSnap) ToggleObjectSnap();
-                    else CycleSnap();
-                });
-            }
-            return true;
-        }
-        if (vk == s_keyReset) {
-            if (!keyUp) F4SE::GetTaskInterface()->AddTask([] { ResetTransform(); });
-            return true;
-        }
-        if (vk == s_keyYaw || vk == s_keyPitch || vk == s_keyRoll) {
-            if (!keyUp) {
-                const int axis = vk == s_keyYaw ? 0 : (vk == s_keyPitch ? 1 : 2);
-                const float step = ModHeld() ? -s_rotStep : s_rotStep;
-                F4SE::GetTaskInterface()->AddTask([axis, step] { NudgeRotate(axis, step); });
-            }
-            return true;
-        }
-
-        struct MoveKey { std::uint16_t vk; int axis; float sign; };
-        const MoveKey moves[] = {
-            { s_keyFwd, 0, 1.0f }, { s_keyBack, 0, -1.0f },
-            { s_keyRight, 1, 1.0f }, { s_keyLeft, 1, -1.0f },
-            { s_keyUp, 2, 1.0f }, { s_keyDown, 2, -1.0f },
-        };
-        for (const auto& m : moves) {
-            if (vk != m.vk) continue;
-            if (!keyUp) {
-                const int axis = m.axis;
-                const float step = m.sign * s_moveStep;
-                F4SE::GetTaskInterface()->AddTask([axis, step] { NudgeMove(axis, step); });
-            }
-            return true;
-        }
-        return false;
-    }
 }

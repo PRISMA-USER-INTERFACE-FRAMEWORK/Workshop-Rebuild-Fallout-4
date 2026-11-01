@@ -5,7 +5,8 @@
 namespace WorkshopFreedom
 {
     void Init();
-    void InstallHooks();
+    [[nodiscard]] bool InstallHooks();
+    [[nodiscard]] bool HooksReady();
     void SetWorkshopActive(bool active);
 
     void Tick();
@@ -16,6 +17,9 @@ namespace WorkshopFreedom
     void ToggleObjectSnap();
     void ResetTransform();
     void NudgeScale(float delta);
+float ScaleStep();
+float RotateStep();
+float MoveStep();
     void NudgeRotate(int axis, float degrees);
     void NudgeMove(int axis, float units);
 
@@ -26,6 +30,9 @@ namespace WorkshopFreedom
 
     void SetToggleChangedCallback(void (*fn)());
     void SetPreUpdateHook(void (*fn)());
+    using NoticeSink = bool (*)(const char* payload);
+    void SetNoticeSink(NoticeSink fn);
+    void SetPlacementOwnerQuery(bool (*fn)());
 
     [[nodiscard]] bool HandleKey(std::uint16_t vk, bool keyUp);
     [[nodiscard]] bool OwnsKey(std::uint16_t vk);

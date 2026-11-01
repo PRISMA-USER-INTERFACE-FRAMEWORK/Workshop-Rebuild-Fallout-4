@@ -1,0 +1,32 @@
+{
+  "_README": "Copy this file to  Documents\\My Games\\Fallout4\\F4SE\\PrismaCraftingRecipes.json  and edit. PrismaCrafting loads it ONCE per session (at save-load / first bench open) and overlays it onto the in-memory recipe index. It only affects PrismaCrafting's own crafting + UI -- no plugin records are touched. Delete the file to fully revert. The plugin already dumps every recipe to  Data\\PrismaUI_F4\\JsonData\\cobj_recipes.json  -- use that as a reference for keys, component ids, and counts.",
+
+  "_KEYS": "Each top-level key matches a recipe, tried in order: createdKey ('Plugin.esp|<localFormID hex>') -> COBJ EditorID -> 8-hex runtime COBJ Form ID. createdKey is the most stable across load-order changes.",
+
+  "_IDS": "component/condition 'id' forms: 'Plugin.esp|1A2B' (plugin + LOCAL Form ID hex, recommended, stable) | '0001A2B3' (raw 8-hex runtime Form ID, load-order dependent) | 'EditorID' (best-effort, only for components seen in some recipe).",
+
+  "_SEMANTICS": "'components' present => REPLACES the recipe's whole component list. 'conditions' present => REPLACES the craft gate (the engine HasPerk/etc check is skipped and these are evaluated in C++ instead); 'conditions': [] => always unlockable. Omit a key to leave that aspect untouched. Conditions are AND-ed. condition types: perk | global | itemcount | keyword. op: ==  !=  >=  >  <=  <.",
+
+  "Fallout4.esm|0010C3AD": {
+    "components": [
+      { "id": "Fallout4.esm|0006907F", "count": 4 },
+      { "id": "Steel", "count": 2 }
+    ],
+    "conditions": [
+      { "type": "perk",      "id": "MyMod.esp|000800",     "op": ">=", "value": 1 },
+      { "type": "global",    "id": "MyMod.esp|001234",     "op": "==", "value": 0 },
+      { "type": "itemcount", "id": "Fallout4.esm|0006907F", "op": ">=", "value": 10 },
+      { "type": "keyword",   "id": "Fallout4.esm|00021882", "op": ">=", "value": 1 }
+    ]
+  },
+
+  "co_ExampleByEditorId": {
+    "components": [
+      { "id": "Fallout4.esm|0001F66A", "count": 6 }
+    ]
+  },
+
+  "Fallout4.esm|001A2B3C": {
+    "conditions": []
+  }
+}

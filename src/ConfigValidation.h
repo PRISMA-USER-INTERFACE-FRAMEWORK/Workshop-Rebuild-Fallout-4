@@ -27,4 +27,25 @@ namespace CraftingConfig::Validation
         return op == "=" || op == "==" || op == "!=" || op == ">=" || op == ">" ||
                op == "<=" || op == "<";
     }
+
+    inline bool IsRecipeCategory(std::string_view category)
+    {
+        return category == "WEAPONS" || category == "MELEE" || category == "AMMO" ||
+               category == "GRENADES" || category == "MINES" || category == "ARMOR" ||
+               category == "HEADGEAR" || category == "BACKPACKS" || category == "HEALING" ||
+               category == "DRUGS" || category == "DRINKS" || category == "FOOD" ||
+               category == "UTILITY" || category == "HOLOTAPES";
+    }
+
+    inline bool IsCategoryCompatible(std::string_view category, std::string_view type)
+    {
+        if (type == "WEAP") return category == "WEAPONS" || category == "MELEE" ||
+                                    category == "GRENADES" || category == "MINES";
+        if (type == "ARMO") return category == "ARMOR" || category == "HEADGEAR" || category == "BACKPACKS";
+        if (type == "ALCH" || type == "INGR") return category == "HEALING" || category == "DRUGS" ||
+                                                     category == "DRINKS" || category == "FOOD";
+        if (type == "AMMO") return category == "AMMO";
+        if (type == "BOOK") return category == "HOLOTAPES";
+        return (type == "MISC" || type == "OMOD") && IsRecipeCategory(category);
+    }
 }

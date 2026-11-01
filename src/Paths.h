@@ -5,9 +5,9 @@
 namespace Paths
 {
 
-    std::filesystem::path F4SEUserDir();
+    const std::filesystem::path& F4SEUserDir();
 
-    std::filesystem::path JsonDataDir();
+    const std::filesystem::path& JsonDataDir();
 
-    std::filesystem::path LogDir();
+    const std::filesystem::path& LogDir();
 }

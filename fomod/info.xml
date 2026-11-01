@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<fomod>
+  <Name>PrismaCrafting</Name>
+  <Author>PrismaUI</Author>
+  <Description>PrismaCrafting replaces the Fallout 4 crafting and settlement workshop menus with a web-rendered interface.</Description>
+  <Website>https://github.com/PRISMA-USER-INTERFACE-FRAMEWORK/Workshop-Rebuild-Fallout-4</Website>
+  <Id>PrismaCrafting</Id>
+</fomod>

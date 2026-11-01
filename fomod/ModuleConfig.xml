@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="http://qconsulting.ca/fo3/ModConfig5.0.xsd">
+  <moduleName>PrismaCrafting</moduleName>
+  <requiredInstallFiles>
+    <folder source="Data" destination="" priority="0" />
+  </requiredInstallFiles>
+  <installSteps order="Explicit">
+    <installStep name="PrismaCrafting">
+      <visible>
+        <dependencies operator="And">
+          <fileDependency file="SettlementMenuManager.esp" state="Active" />
+        </dependencies>
+      </visible>
+      <optionalFileGroups>
+        <group name="Compatibility" type="SelectAll">
+          <plugins order="Explicit">
+            <plugin name="Settlement Menu Manager detected">
+              <description>Settlement Menu Manager.esp is installed and enabled. PrismaCrafting works with Settlement Menu Manager; leave Settlement Menu Manager enabled.</description>
+              <typeDescriptor>
+                <type name="Required" />
+              </typeDescriptor>
+            </plugin>
+          </plugins>
+        </group>
+      </optionalFileGroups>
+    </installStep>
+    <installStep name="PrismaCrafting">
+      <visible>
+        <dependencies operator="And">
+          <fileDependency file="SettlementMenuManager.esp" state="Inactive" />
+        </dependencies>
+      </visible>
+      <optionalFileGroups>
+        <group name="Compatibility" type="SelectAll">
+          <plugins order="Explicit">
+            <plugin name="Settlement Menu Manager found but disabled">
+              <description>Settlement Menu Manager.esp is installed but disabled. PrismaCrafting works with Settlement Menu Manager; enable it and leave it enabled.</description>
+              <typeDescriptor>
+                <type name="Required" />
+              </typeDescriptor>
+            </plugin>
+          </plugins>
+        </group>
+      </optionalFileGroups>
+    </installStep>
+    <installStep name="PrismaCrafting">
+      <visible>
+        <dependencies operator="And">
+          <fileDependency file="SettlementMenuManager.esp" state="Missing" />
+        </dependencies>
+      </visible>
+      <optionalFileGroups>
+        <group name="Compatibility" type="SelectAll">
+          <plugins order="Explicit">
+            <plugin name="Settlement Menu Manager not detected">
+              <description>Settlement Menu Manager.esp was not detected. PrismaCrafting works without it. If you install Settlement Menu Manager, leave it enabled.</description>
+              <typeDescriptor>
+                <type name="Required" />
+              </typeDescriptor>
+            </plugin>
+          </plugins>
+        </group>
+      </optionalFileGroups>
+    </installStep>
+  </installSteps>
+</config>

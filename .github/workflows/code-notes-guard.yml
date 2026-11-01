@@ -1,0 +1,20 @@
+name: code-notes-guard
+
+on:
+  pull_request:
+
+jobs:
+  no-code-notes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Refuse code notes in the PR
+        run: |
+          added=$(git diff --name-only --diff-filter=ACMR "origin/${{ github.base_ref }}...HEAD" | grep -Ei '(^|/)(docs/code-notes/.+\.md|(docs/)?(CODE_NOTES|SOURCE_COMMENT_ARCHIVE)\.md)$' || true)
+          if [ -n "$added" ]; then
+            echo "Code notes do not belong in a PR:"
+            echo "$added"
+            exit 1
+          fi
