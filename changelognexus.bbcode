@@ -2,24 +2,48 @@
 
 [spoiler]
 
-Workshop Rebuilt 1.2.0 moves the interface onto the current PrismaUI framework and adds controller navigation to the crafting menu and the settlement build panel. Controller support is still awaiting its full in-game acceptance pass.
+Workshop Rebuilt 1.2.0 is a month of work: the interface moves onto the current PrismaUI framework, the crafting menu and the settlement build panel can be played with a controller, and a long list of crafting and settlement fixes makes both menus steadier. Controller support is still awaiting its full in-game acceptance pass.
 
 [b]Important[/b]
 
 This release is built against the [b]PrismaUI_F4 2.1.1[/b] public headers and requires [b]PrismaUI_F4 2.2.0 or newer[/b] at runtime. Older framework builds are not supported — if the interface misbehaves after updating Workshop Rebuilt, update the framework as well.
 
-It supports [b]Fallout 4 1.10.163 (Old-Gen)[/b] and [b]1.11.191, 1.11.221 and 1.11.240 (Anniversary)[/b], including the settlement build helper. Next-Gen 1.10.984 is supported including the settlement build helper; 1.10.980 loads with the build helper off.
+It supports [b]Fallout 4 1.10.163 (Old-Gen)[/b] and [b]1.11.191, 1.11.221 and 1.11.240 (Anniversary)[/b], including the settlement build helper. Next-Gen 1.10.984 is supported including the settlement build helper (its addresses were found by static analysis and have not been tried in game yet); 1.10.980 loads with the build helper off.
 
 [size=4][b]Controller support[/b][/size]
 
 [list]
 [*]The D-pad now navigates both the crafting menu and the settlement build panel, with a visible focus outline that follows your selection and scrolls it into view.[/*]
 [*]You can enter and leave the settlement panel without a keyboard: [b]Back[/b] (View/Share) takes cursor focus and hands it back. Previously this needed the C key, which a controller cannot press.[/*]
-[*][b]A[/b] crafts, confirms and places; [b]B[/b] backs out and cancels; [b]X[/b] opens the scrap confirmation; [b]Y[/b] favourites and tags the selected item.[/*]
-[*]The crafting menu, including the Stations panel, can now be navigated with the D-pad; before this it responded to a controller only in part.[/*]
-[*]Button prompts render the framework's shared Xbox and PlayStation art at a consistent size in both panels, and keyboard prompts keep their keycap styling. The mod no longer ships its own controller art.[/*]
-[*]Prompts refresh when you pick up or put down a controller, instead of only when you open a menu.[/*]
-[*]Held directions repeat at a comfortable rate, while a held [b]A[/b] no longer places the same building over and over.[/*]
+[*]A crafts, confirms and places; B backs out and cancels; X opens the scrap confirmation; Y favourites and tags the selected item. Holding B closes the crafting menu or the Workshop.[/*]
+[*]Crafting: D-pad Left/Right move along the filter row and reach the pager; LB/RB switch categories; B backs out of a recipe's detail view; the Stations panel keeps focus.[/*]
+[*]Settlement panel: Left/Right browse, Up/Down change category, LB/RB walk the dock tabs, and the shortcuts for every free-build key work from the pad. Selecting an item no longer places it by itself.[/*]
+[*]Button prompts render the framework's shared Xbox and PlayStation art at a consistent size, and refresh when you pick up or put down a controller.[/*]
+[*]Held directions repeat at a comfortable rate, while a held A no longer places the same building over and over. Fixed stuck controller modifiers and slider D-pad input.[/*]
+[/list]
+
+[size=4][b]Crafting menu[/b][/size]
+
+[list]
+[*]Recipes sort into the right category from their item data first, with name matching only as a fallback. Whole-word matching keeps vanilla names like compound consumables and headgear in the right place.[/*]
+[*]Recipe cards list every requirement. Tool badges only show for plain "has at least one" requirements, and perk badges follow the perk rank the recipe actually compares against, and only for conditions the game checks on the player alone.[/*]
+[*]Crafting refuses requests that do not fit the bench you are at, and stops before taking payment when a required material cannot be resolved.[/*]
+[*]Junk-material totals, stack counts and condition totals no longer wrap or overflow, and scrap yields no longer count themselves.[/*]
+[*]The menu recovers after a filter hides your current category, after the page is recreated, after a failed binding, and when reopening a bench. Cooking titles stay correct across refreshes, and stale station and cheat-mode state is cleared on reopen.[/*]
+[*]UNLOCK ALL and upgrade refresh work on every bench open, and workbench upgrades are saved with your game.[/*]
+[*]Cheat mode is off unless you switch it on in the ini ([b]AllowCheatMode[/b]); the toggle is hidden while it is off.[/*]
+[*]Names and prices display correctly with non-English characters, and the interface has packaged translations.[/*]
+[/list]
+
+[size=4][b]Settlement build helper[/b][/size]
+
+[list]
+[*]The helper now arms on every supported game version, and a bad menu entry can no longer stop it from loading.[/*]
+[*]Placement and scrap no longer fall out of step when a settlement changes, a menu closes mid-action, or an item is placed twice; a cancelled placement cleans up its ghost and any half-spawned object.[/*]
+[*]Materials: building takes from the workshop's own storage first and only charges the plugin for its own placements. The happiness figure matches the one the game's HUD shows.[/*]
+[*]The catalog pages long lists, keeps favourites and filters, shows tool requirements in the detail panel, and refreshes when it changes. Tilt, rotate and move only work on a held item.[/*]
+[*]Rotation and movement settings can no longer hang the game with extreme values, and malformed key bindings and panel messages are rejected.[/*]
+[*]Placement notices show as translated text.[/*]
 [/list]
 
 [size=4][b]PrismaUI 2.1.1[/b][/size]
@@ -27,15 +51,21 @@ It supports [b]Fallout 4 1.10.163 (Old-Gen)[/b] and [b]1.11.191, 1.11.221 and 1.
 [list]
 [*]Updated to the PrismaUI 2.1.1 public API. PrismaUI_F4 2.2.0 or newer is required at runtime for controller bridge recovery.[/*]
 [*]The mouse pointer now stays with whichever panel owns focus, including after the game window loses and regains focus.[/*]
-[*]Smaller, cleaner interface code on the framework's current input and cursor interfaces.[/*]
+[/list]
+
+[size=4][b]Settings and safety[/b][/size]
+
+[list]
+[*]Your settings file and recipe exports survive a failed or interrupted save, and work on folders with non-English names.[/*]
+[*]Bad numbers in recipe or workbench configuration files are rejected instead of crashing, and overrides that do not match anything produce a warning.[/*]
 [/list]
 
 [size=4][b]Under the hood[/b][/size]
 
 [list]
-[*]The plugin now ships the framework's current public interface instead of an older pinned copy, so a future framework update cannot leave it calling into an interface that has moved.[/*]
-[*]Removed a leftover interface snapshot that was never referenced.[/*]
-[*]The release archive now installs through its bundled FOMOD: the packaged files sit under the folder the installer copies, so a mod manager installs the plugin, the interface files and the sounds in one step.[/*]
+[*]The plugin now ships the framework's current public interface instead of an older pinned copy.[/*]
+[*]The release archive installs through its bundled FOMOD: a mod manager installs the plugin, the interface files and the sounds in one step.[/*]
+[*]Builds now run on GitHub (Windows runner) against the Next-Gen compatible CommonLibF4.[/*]
 [/list]
 
 [/spoiler]
