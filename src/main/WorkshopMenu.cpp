@@ -324,7 +324,7 @@ public:
                                  "bench (e.g. ECO Universal Workbench) -- not intercepting, so the vanilla "
                                  "menu's furniture-exit still runs and the player can stand up. Set "
                                  "[Compat]InterceptFurnitureSwapperBenches=1 to show the catalog here "
-                                 "instead (experimental, see #20).",
+                                 "instead (experimental).",
                                  a_event.menuName.c_str());
                     return RE::BSEventNotifyControl::kContinue;
                 }

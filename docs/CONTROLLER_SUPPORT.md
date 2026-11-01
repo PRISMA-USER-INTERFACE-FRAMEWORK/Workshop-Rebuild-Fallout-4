@@ -101,7 +101,7 @@ modifiers cleared. A focus entry only reports the press, so unfocused input has 
 A and LT/RT are never unfocused: A is Fallout's grab/place and the triggers are held chords.
 
 These routes need a PrismaUI build that keeps one `BindControllerFocusEntry` registration per
-`(view, button)` (Prisma-Matrix `framework/prismaui-core`, `ControllerActions.cpp:g_focusEntries`).
+`(view, button)` (the PrismaUI framework's controller action table).
 The V12 signatures did not change, so the plugin cannot detect an older provider that keeps one entry
 per view. `BindPhase` therefore binds panel focus (Back) last in every focus-entry batch and re-asserts
 it after a `Browsing` rebind: on an older provider Back is the surviving entry and the dock behaves as

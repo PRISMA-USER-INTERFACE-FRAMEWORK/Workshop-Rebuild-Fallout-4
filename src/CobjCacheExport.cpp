@@ -68,7 +68,7 @@ namespace CobjCache
                 "Recipes at the bench you have open (settlement-workshop buildables excluded), in the override "
                 "schema. Copy entries you want to change into  Documents\\My Games\\Fallout4\\F4SE\\PrismaCraftingRecipes.json  "
                 "and edit ids/counts. Keys are the createdKey; to target one recipe use its _formId. Underscore "
-                "fields are ignored. See docs/Prisma/PrismaCrafting/CRAFTING_CONFIG.md in the dev workspace."}};
+                "fields are ignored. See docs/CRAFTING_CONFIG.md."}};
             std::set<std::string> emitted;
             char hx[16];
             for (const auto& r : recipes) {
