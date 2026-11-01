@@ -1,4 +1,4 @@
-# Fallen World Crafting: What's New
+# Workshop Rebuild: What's New
 
 ## Workshop Rebuilt 1.2.0
 
