@@ -71,7 +71,7 @@ no consumer extension header is needed.
 | Dependency | Notes |
 |---|---|
 | xmake | the only supported build system; there is no cmake path |
-| CommonLibF4 | the organization-owned `commonlib_NonVR` fork at `a64ea356f02bf2bc3f2821f8997bbb366082858b`, with `commonlib-shared` at `cb7c610335b7e4b4fc8a451ed11c993e5b1103f9`; point `COMMONLIBF4_PATH` at a checkout or place one next to this repo |
+| CommonLibF4 | [commonlibf4-nomad](https://github.com/G-A-R-D-E-N/commonlibf4-nomad), cloned with `--recurse-submodules` (CI builds against its `main`); point `COMMONLIBF4_PATH` at a checkout or place one next to this repo |
 | spdlog | pulled in via CommonLibF4; the spdlog config must match commonlib's |
 | fmt, nlohmann_json | declared by `xmake.lua` |
 
