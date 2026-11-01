@@ -350,7 +350,8 @@ static void ResolveWorkshopCategories(const RawCategoryScan& a_raw, CategoryScan
         if (i != 0) {
             g_syncStep = "filterKeywordName";
             if (fields.keywordName[0]) {
-                here = here.empty() ? std::string(fields.keywordName) : here + " > " + fields.keywordName;
+                const std::string label = CobjCache::FriendlyFilter(fields.keywordName);
+                here = here.empty() ? label : here + " > " + label;
             } else {
                 ++a_out.namelessNodes;
                 DLOG(Recipes, "category node under '{}' has no usable name (keyword={:08X}) -- "

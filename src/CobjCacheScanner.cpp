@@ -128,7 +128,7 @@ static std::string ArmorSubcat(RE::TESObjectARMO* armo)
         return {};
     }
 
-static std::string FriendlyFilter(const std::string& eid)
+std::string FriendlyFilter(const std::string& eid)
     {
         std::string s = eid;
         for (const char* pre : { "WorkshopRecipeFilter", "RecipeFilter", "Workshop", "Recipe", "Filter" }) {

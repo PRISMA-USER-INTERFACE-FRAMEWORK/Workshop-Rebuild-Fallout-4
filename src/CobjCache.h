@@ -134,6 +134,7 @@ namespace CobjCache
     void ExportCurrentView(const std::vector<uint32_t>& benchIds);
 
     bool IsBenchKeyword(uint32_t keywordFormId);
+    std::string FriendlyFilter(const std::string& eid);
     void ResetCraftBenchScopeWarning();
 
     int CraftRecipe(uint32_t cobjFormId, bool bypassGates,

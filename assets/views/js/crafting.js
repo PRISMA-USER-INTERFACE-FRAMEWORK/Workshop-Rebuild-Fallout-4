@@ -177,7 +177,7 @@ function setPageEpoch(session){
 }
 window.setPageEpoch = setPageEpoch;
 window.refreshPage = () => {
-  if (selected >= 0 && filtered[selected]) _reselectFormId = filtered[selected]["form" + "Id"];
+  if (selected >= 0 && filtered[selected]) _reselectFormId = filtered[selected].formRef;
   loadPage(false);
 };
 
@@ -639,7 +639,7 @@ function craft() {
   const r = filtered[selected];
   if (canCraft(r) !== true) return;
   const qty = Math.max(1, Math.min(craftQty, maxCraftable(r)));
-  _pendingCraft = { ["form" + "Id"]: r["form" + "Id"], page: page, name: displayName(r) };
+  _pendingCraft = { formRef: r.formRef, page: page, name: displayName(r) };
   if (window.prisma_craft) window.prisma_craft(r.formRef + "," + qty);
 }
 function closeMenu() {

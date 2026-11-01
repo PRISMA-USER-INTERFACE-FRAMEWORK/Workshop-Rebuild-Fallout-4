@@ -34,7 +34,7 @@ function wbArmCompletion(){
   _wbCompleteTimer = setTimeout(() => {
     _wbCompleteTimer = null;
     if (!document.body.classList.contains("workbench-mode")) {
-      if (selected >= 0 && filtered[selected]) _reselectFormId = filtered[selected]["form" + "Id"];
+      if (selected >= 0 && filtered[selected]) _reselectFormId = filtered[selected].formRef;
       loadPage(false);
     }
   }, Math.max(0, (soonest - wbServerNow()) * 1000));

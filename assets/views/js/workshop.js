@@ -379,7 +379,7 @@ function actScrap() {
 function actTag(desired) {
     if (!selectedItem || typeof window.prisma_tag !== 'function') return;
     const state = desired === true ? ',1' : desired === false ? ',0' : '';
-    window.prisma_tag(String(selectedItem["form" + "Id"]) + state);
+    window.prisma_tag(String(selectedItem.formRef) + state);
 }
 function closeHelper() {
 

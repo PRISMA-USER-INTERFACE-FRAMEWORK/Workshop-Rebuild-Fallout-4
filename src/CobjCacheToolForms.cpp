@@ -1,4 +1,3 @@
-// Constraint: tool classification is kept out of the scanner so the scanner stays within the source line limit.
 #include "CobjCacheInternal.h"
 
 #include <cctype>

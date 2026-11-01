@@ -70,9 +70,9 @@ no consumer extension header is needed.
 
 | Dependency | Notes |
 |---|---|
-| xmake | the only supported build system; there is no cmake path |
+| xmake | 3.0.0 or newer; the only supported build system, there is no cmake path |
 | CommonLibF4 | [commonlibf4-nomad](https://github.com/G-A-R-D-E-N/commonlibf4-nomad), cloned with `--recurse-submodules` (CI builds against its `main`); point `COMMONLIBF4_PATH` at a checkout or place one next to this repo |
-| spdlog | pulled in via CommonLibF4; the spdlog config must match commonlib's |
+| spdlog | pinned by `xmake.lua`; the spdlog config must match commonlib's |
 | fmt, nlohmann_json | declared by `xmake.lua` |
 
 Build:
@@ -94,7 +94,7 @@ Output lands in `build/windows/x64/release/PrismaCrafting.dll`.
 ```
 
 The views must land under the framework's `PrismaUI_F4/views/` root, because `CreateView` is passed a
-filename relative to that root (`"crafting.html"`, `"workshop.html").
+filename relative to that root (`"crafting.html"`, `"workshop.html"`).
 
 Settings are written to `Documents\My Games\Fallout4\F4SE\PrismaCrafting.ini`, which is deliberately
 outside the mod folder so Mod Organizer does not virtualize it.
