@@ -4,8 +4,62 @@
 
 #include "WorkshopIDs.h"
 
+#include <algorithm>
+#include <bcrypt.h>
+#include <format>
+
 namespace crafting::anchors
 {
+    bool ExecutableIsKnown()
+    {
+        // Constraint: these are the SHA-256 of the stock executables for the runtimes the loader accepts.
+        static constexpr std::string_view kKnown[] = {
+            "55f57947db9e05575122fae1088f0b0247442f11e566b56036caa0ac93329c36",
+            "5b2a58004f1856e51235132ab304b20c1434017067703e4282e8b0d5bc539623",
+            "f4b921adce32c357b56f90b92bd9ecfef4f3572412d1a32a3d35c76930440ce8",
+            "bcb8f9fe660ef4c33712b873fdc24e5ecbd6a77e629d6419f803c2c09c63eaf2",
+            "6c54e6152b69cc976c3f2aa7bae2b99b86c056c596cbabce09ab8d60974bb537",
+            "81694b37816c8045855905a52c5fb13583c5803121fabb5024760892014e9bc6",
+            "428f9996cc4248e26c0f62f9fdd3eaf0e5eb305834b67ee5996538e593218b61",
+            "fdcef37ac1230af6d0b0050eb2142b139ef3a867b37b9211fb6edfcc646072f8",
+        };
+
+        std::wstring path(32768, L'\0');
+        path.resize(::GetModuleFileNameW(nullptr, path.data(), static_cast<DWORD>(path.size())));
+        std::ifstream file{ std::filesystem::path(path), std::ios::binary };
+
+        BCRYPT_ALG_HANDLE alg = nullptr;
+        BCRYPT_HASH_HANDLE hash = nullptr;
+        std::uint8_t digest[32]{};
+        bool hashed = file.is_open() &&
+                      BCryptOpenAlgorithmProvider(&alg, BCRYPT_SHA256_ALGORITHM, nullptr, 0) == 0 &&
+                      BCryptCreateHash(alg, &hash, nullptr, 0, nullptr, 0, 0) == 0;
+        if (hashed) {
+            std::vector<char> buf(1 << 20);
+            for (std::streamsize n = 0;
+                 hashed && (file.read(buf.data(), static_cast<std::streamsize>(buf.size())), (n = file.gcount()) > 0);)
+                hashed = BCryptHashData(hash, reinterpret_cast<PUCHAR>(buf.data()), static_cast<ULONG>(n), 0) == 0;
+            hashed = hashed && file.eof() && BCryptFinishHash(hash, digest, sizeof(digest), 0) == 0;
+        }
+        if (hash) BCryptDestroyHash(hash);
+        if (alg) BCryptCloseAlgorithmProvider(alg, 0);
+
+        if (!hashed) {
+            logger::warn("PrismaCrafting: [ANCHORS] could not hash the game executable; not blocking on it");
+            return true;
+        }
+
+        std::string hex;
+        for (const auto b : digest) hex += std::format("{:02x}", b);
+        const bool known = std::ranges::find(kKnown, hex) != std::end(kKnown);
+        if (known)
+            logger::info("PrismaCrafting: [ANCHORS] game executable matches a stock build ({})", hex);
+        else
+            logger::critical("PrismaCrafting: [ANCHORS] game executable {} is not a known stock build; "
+                             "the vanilla workshop stays. Set [Compat]AllowUnknownExecutable=1 to override.", hex);
+        return known;
+    }
+
     namespace
     {
         bool UserPtr(std::uintptr_t p)

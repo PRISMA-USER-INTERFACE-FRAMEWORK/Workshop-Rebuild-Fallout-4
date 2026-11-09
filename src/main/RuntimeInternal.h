@@ -75,6 +75,7 @@ std::filesystem::path SettingsIniPath();
 int LoadScale(const char* key);
 void SaveScale(const char* key, int pct);
 bool LoadInterceptFurnitureSwapperBenches();
+bool LoadAllowUnknownExecutable();
 bool LoadAllowCheatMode();
 bool LoadModelPreviews();
 void SaveUnlockAllBenches(bool enabled);

@@ -76,4 +76,5 @@ namespace crafting::anchors
     }
 
     [[nodiscard]] bool LogAll();
+    [[nodiscard]] bool ExecutableIsKnown();
 }
