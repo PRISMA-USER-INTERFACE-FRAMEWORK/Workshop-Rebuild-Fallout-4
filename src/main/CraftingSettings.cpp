@@ -125,6 +125,15 @@ bool LoadInterceptFurnitureSwapperBenches()
     return ini.GetBoolValue("Compat", "InterceptFurnitureSwapperBenches", false);
 }
 
+bool LoadAllowUnknownExecutable()
+{
+    std::lock_guard<std::mutex> lock(g_settingsLock);
+    CSimpleIniA ini;
+    ini.SetUnicode();
+    ini.LoadFile(SettingsIniPath().c_str());
+    return ini.GetBoolValue("Compat", "AllowUnknownExecutable", false);
+}
+
 bool LoadAllowCheatMode()
 {
     std::lock_guard<std::mutex> lock(g_settingsLock);

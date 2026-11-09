@@ -190,6 +190,11 @@ namespace crafting::ini
 ;  if you would rather use PrismaCrafting's menu there.
 ;InterceptFurnitureSwapperBenches=0
 
+;  Keep the replacement workshop even when the game executable is not a known
+;  stock build, such as a repack. Off by default: the workshop code needs the
+;  stock layout, and on an unknown executable it can crash the game.
+;AllowUnknownExecutable=0
+
 ; ----------------------------------------------------------------------------
 ;  [Author] -- mod authoring
 ; ----------------------------------------------------------------------------

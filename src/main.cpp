@@ -253,7 +253,9 @@ static void InitializeRuntimeOnGameThread()
 
     if (!g_runtimeInitComplete.load(std::memory_order_acquire)) {
         if (!g_anchorCheckComplete.exchange(true, std::memory_order_acq_rel))
-            g_anchorHealthReady.store(crafting::anchors::LogAll(), std::memory_order_release);
+            g_anchorHealthReady.store(crafting::anchors::LogAll() &&
+                (LoadAllowUnknownExecutable() || crafting::anchors::ExecutableIsKnown()),
+                std::memory_order_release);
         static std::atomic<bool> s_inputHooksPrepared{ false };
         if (!s_inputHooksPrepared.exchange(true, std::memory_order_acq_rel)) {
             g_api->SuppressVanillaMenuIf("ExamineConfirmMenu", []() -> bool {
