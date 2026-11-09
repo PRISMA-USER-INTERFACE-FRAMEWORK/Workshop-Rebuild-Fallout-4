@@ -4,8 +4,57 @@
 
 #include "WorkshopIDs.h"
 
+#include <cmath>
+
 namespace crafting::anchors
 {
+    namespace
+    {
+        bool UserPtr(std::uintptr_t p)
+        {
+            return p == 0 || (p >= 0x10000 && p < 0x800000000000ull && (p & 7) == 0);
+        }
+
+        // Constraint: reads the resolved globals only, never dereferences pointers inside them.
+        bool GlobalsHoldPlausibleData()
+        {
+            bool ok = true;
+            const auto fail = [&](const char* what) {
+                logger::error("PrismaCrafting: [ANCHORS]  FAIL  content {}", what);
+                ok = false;
+            };
+
+            const auto* node = reinterpret_cast<const RE::Workshop::WorkshopMenuNode*>(ids::WorkshopMenuRoot.address());
+            if (!UserPtr(reinterpret_cast<std::uintptr_t>(node->filterKeyword)) ||
+                !UserPtr(reinterpret_cast<std::uintptr_t>(node->recipe)) ||
+                !UserPtr(reinterpret_cast<std::uintptr_t>(node->form)))
+                fail("WorkshopMenuRoot node holds a non-pointer where a form pointer belongs");
+            if (node->parent != nullptr)
+                fail("WorkshopMenuRoot node has a parent, so it is not the root");
+            if (node->selected != 0 && node->selected != 1)
+                fail("WorkshopMenuRoot node flag byte is neither 0 nor 1");
+            const auto size = node->children.size();
+            const auto cap = node->children.capacity();
+            const auto data = reinterpret_cast<std::uintptr_t>(node->children.data());
+            if (size > cap || size > 100000 || !UserPtr(data) || (cap > 0 && !data))
+                fail("WorkshopMenuRoot child array is inconsistent");
+
+            if (*reinterpret_cast<const std::uint8_t*>(ids::ActiveEdit.address()) > 1)
+                fail("ActiveEdit is not a bool");
+            if (*reinterpret_cast<const std::uint8_t*>(ids::MultiSelect.address()) > 1)
+                fail("MultiSelect is not a bool");
+            if (*reinterpret_cast<const std::uint32_t*>(ids::PlacementCollisionCount.address()) > 0xFFFF)
+                fail("PlacementCollisionCount is implausibly large");
+
+            const auto* pos = reinterpret_cast<const float*>(ids::PlacementItemTranslLS.address());
+            for (int i = 0; i < 3; ++i)
+                if (!std::isfinite(pos[i]) || std::fabs(pos[i]) > 1.0e8f)
+                    fail("PlacementItemTranslLS is not a finite position");
+
+            return ok;
+        }
+    }
+
     bool LogAll()
     {
         const auto& module = REX::FModule::GetExecutingModule();
@@ -60,6 +109,7 @@ namespace crafting::anchors
         std::size_t ok = 0, bad = 0;
         for (const auto& r : results)
             (r.sane ? ok : bad)++;
+        if (bad == 0 && !GlobalsHoldPlausibleData()) ++bad;
 
         logger::info("PrismaCrafting: [ANCHORS] runtime {}.{}.{}.{} -- checking {} engine anchors",
                      ver.major(), ver.minor(), ver.patch(), ver.build(), results.size());
