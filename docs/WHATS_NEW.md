@@ -1,5 +1,10 @@
 # Workshop Rebuild: What's New
 
+## Workshop Rebuilt 1.3.1
+
+Fixes a crash when opening the workshop. The workshop now also falls back to the vanilla menu when
+the game executable or engine data does not look right, with an ini switch to override that.
+
 ## Workshop Rebuilt 1.3.0
 
 Next-Gen 1.10.984 is now supported, including the settlement build helper (found by static analysis,
