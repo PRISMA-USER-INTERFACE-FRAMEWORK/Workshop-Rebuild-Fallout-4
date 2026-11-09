@@ -12,7 +12,6 @@ namespace crafting::anchors
 {
     bool ExecutableIsKnown()
     {
-        // Constraint: these are the SHA-256 of the stock executables for the runtimes the loader accepts.
         static constexpr std::string_view kKnown[] = {
             "55f57947db9e05575122fae1088f0b0247442f11e566b56036caa0ac93329c36",
             "5b2a58004f1856e51235132ab304b20c1434017067703e4282e8b0d5bc539623",
@@ -67,7 +66,6 @@ namespace crafting::anchors
             return p == 0 || (p >= 0x10000 && p < 0x800000000000ull && (p & 7) == 0);
         }
 
-        // Constraint: reads the resolved globals only, never dereferences pointers inside them.
         bool GlobalsHoldPlausibleData()
         {
             bool ok = true;
