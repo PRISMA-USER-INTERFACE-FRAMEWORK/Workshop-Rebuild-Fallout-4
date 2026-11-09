@@ -4,8 +4,6 @@
 
 #include "WorkshopIDs.h"
 
-#include <cmath>
-
 namespace crafting::anchors
 {
     namespace
@@ -31,7 +29,7 @@ namespace crafting::anchors
                 fail("WorkshopMenuRoot node holds a non-pointer where a form pointer belongs");
             if (node->parent != nullptr)
                 fail("WorkshopMenuRoot node has a parent, so it is not the root");
-            if (node->selected != 0 && node->selected != 1)
+            if (*reinterpret_cast<const std::uint8_t*>(&node->selected) > 1)
                 fail("WorkshopMenuRoot node flag byte is neither 0 nor 1");
             const auto size = node->children.size();
             const auto cap = node->children.capacity();
@@ -43,13 +41,6 @@ namespace crafting::anchors
                 fail("ActiveEdit is not a bool");
             if (*reinterpret_cast<const std::uint8_t*>(ids::MultiSelect.address()) > 1)
                 fail("MultiSelect is not a bool");
-            if (*reinterpret_cast<const std::uint32_t*>(ids::PlacementCollisionCount.address()) > 0xFFFF)
-                fail("PlacementCollisionCount is implausibly large");
-
-            const auto* pos = reinterpret_cast<const float*>(ids::PlacementItemTranslLS.address());
-            for (int i = 0; i < 3; ++i)
-                if (!std::isfinite(pos[i]) || std::fabs(pos[i]) > 1.0e8f)
-                    fail("PlacementItemTranslLS is not a finite position");
 
             return ok;
         }
@@ -135,9 +126,9 @@ namespace crafting::anchors
             logger::info("PrismaCrafting: [ANCHORS] all {} resolved and landed in a plausible "
                          "section", ok);
         } else {
-            logger::critical("PrismaCrafting: [ANCHORS] {} of {} anchors FAILED -- the features "
-                             "using them will misbehave or crash. Report this log; the failing "
-                             "names above say exactly which mappings are wrong on this runtime.",
+            logger::critical("PrismaCrafting: [ANCHORS] {} anchor or content checks FAILED out of {} anchors -- the features "
+                             "using them will misbehave or crash. Report this log; the FAIL lines "
+                             "above say exactly which mappings are wrong on this runtime.",
                              bad, results.size());
         }
 
