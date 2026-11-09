@@ -66,7 +66,6 @@ public:
             logger::critical("PrismaCrafting: WorkshopMenu interception incomplete; replacement disabled");
             return false;
         }
-        // Constraint: assign the raw address; a Relocation<uintptr_t> here converts through operator bool and stores 1.
         _ProcessMessage = originalProcess;
         _AdvanceMovie = originalAdvance;
         s_installed = true;
