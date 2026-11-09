@@ -66,8 +66,9 @@ public:
             logger::critical("PrismaCrafting: WorkshopMenu interception incomplete; replacement disabled");
             return false;
         }
-        _ProcessMessage = REL::Relocation<std::uintptr_t>{ originalProcess };
-        _AdvanceMovie = REL::Relocation<std::uintptr_t>{ originalAdvance };
+        // Constraint: assign the raw address; a Relocation<uintptr_t> here converts through operator bool and stores 1.
+        _ProcessMessage = originalProcess;
+        _AdvanceMovie = originalAdvance;
         s_installed = true;
         logger::info("PrismaCrafting: WorkshopMenu vtable hooked (slots 3/4 -- placement engine)");
         return true;
